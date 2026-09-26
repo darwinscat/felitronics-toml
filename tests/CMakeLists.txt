@@ -17,10 +17,12 @@ else()
 endif()
 
 # CMake puts /EHsc into CMAKE_CXX_FLAGS for every MSVC target, and a target cannot take it back: adding /EHs-c-
-# after it only earns a D9025 "overriding" warning. So this directory (the variable is directory-scoped) drops
-# it and states exception handling per target.
+# after it only earns a D9025 "overriding" warning. So this directory (the variables are directory-scoped) drops
+# every whole /EH option token and states exception handling per target.
 if(MSVC)
-    string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    foreach(flags CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_MINSIZEREL)
+        string(REGEX REPLACE "(^| )[/-]EH[^ ]*" "" ${flags} "${${flags}}")
+    endforeach()
 endif()
 
 # felitronics_toml_test(<name> <source> [NO_EXCEPTIONS] [ARGS <arguments>...])
