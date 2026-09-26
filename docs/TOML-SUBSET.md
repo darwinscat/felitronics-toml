@@ -135,8 +135,11 @@ Under IEEE round-to-nearest, ties-to-even, that division correctly rounds the ex
 rational. Its bits therefore equal those of a correctly rounded conversion of the
 same decimal text. Neither integer conversion is lossy, and no libc number parser,
 float `to_chars`/`from_chars`, locale, or extended-precision intermediate is involved.
-The header asserts IEEE binary64. The contract excludes fast-math and changes to the
-floating-point rounding mode; `-ffp-contract=off` and the wasm no-exceptions/no-RTTI
+The header asserts IEEE binary64, and that `double` arithmetic is evaluated as `double`
+(`FLT_EVAL_METHOD` 0 or 1): x87 arithmetic rounds a quotient twice, first to 64 bits, and
+`7832510068573872 / 10^8` then comes out one unit in the last place low. A 32-bit x86
+build therefore needs SSE2 arithmetic (MSVC's default; `-msse2 -mfpmath=sse` for gcc and
+clang). The contract excludes fast-math and changes to the floating-point rounding mode; `-ffp-contract=off` and the wasm no-exceptions/no-RTTI
 settings are supported. No mutable globals or function-local statics are used.
 
 `Decimal::fromDouble(double x, uint8_t scale)` returns a `Decimal`, rounding the

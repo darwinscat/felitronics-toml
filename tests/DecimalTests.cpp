@@ -58,6 +58,8 @@ int main()
             check ((state >> 63) ? -m : m, s);
         }
     }
+    // x87 arithmetic rounds this quotient to 64 bits and then to 53, one unit in the last place low (Toml.h asserts it away).
+    check (7832510068573872, 8);
     test::group ("fromDouble rounds the binary64 product half away, or explicitly refuses");
     test::ok (Decimal::fromDouble (1.25, 1) == Decimal { 13, 1 }, "positive halfway");
     test::ok (Decimal::fromDouble (-1.25, 1) == Decimal { -13, 1 }, "negative halfway");

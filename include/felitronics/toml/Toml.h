@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cfloat>      // FLT_EVAL_METHOD
 #include <cmath>       // signbit preserves negative zero without assuming byte order
 #include <cstddef>
 #include <cstdint>
@@ -85,6 +86,11 @@ struct Decimal
     bool operator== (const Decimal&) const = default;
 };
 static_assert (std::numeric_limits<double>::is_iec559 && std::numeric_limits<double>::digits == 53);
+// x87 arithmetic (FLT_EVAL_METHOD 2) rounds the division to 64 bits first and then to 53, which is not always the
+// correctly rounded result: Decimal{7832510068573872, 8} comes out one unit in the last place low.
+static_assert (FLT_EVAL_METHOD == 0 || FLT_EVAL_METHOD == 1,
+               "felitronics::toml needs double arithmetic evaluated as double: on 32-bit x86, build with SSE2 "
+               "(-msse2 -mfpmath=sse; MSVC's default)");
 
 struct Value;
 struct Entry;
