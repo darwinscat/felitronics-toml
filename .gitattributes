@@ -1,0 +1,3 @@
+# The conformance corpus is bytes, not text: positions are UTF-8 byte columns and some documents are
+# deliberately malformed (bare CR, NUL, invalid UTF-8). No line-ending conversion, on any checkout.
+tests/corpus/** -text

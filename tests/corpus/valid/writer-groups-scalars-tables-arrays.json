@@ -1,0 +1,11 @@
+{
+  "sub": {
+    "z": {"type": "bool", "value": "false"}
+  },
+  "b": {"type": "integer", "value": "1"},
+  "a": {"type": "decimal", "value": "-0.00"},
+  "": {"type": "string", "value": "é\u000a\\\""},
+  "array": [
+    {}
+  ]
+}

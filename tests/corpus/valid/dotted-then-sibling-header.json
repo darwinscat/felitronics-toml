@@ -1,0 +1,8 @@
+{
+  "a": {
+    "b": {"type": "integer", "value": "1"},
+    "c": {
+      "x": {"type": "integer", "value": "2"}
+    }
+  }
+}

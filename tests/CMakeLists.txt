@@ -23,9 +23,9 @@ if(MSVC)
     string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 endif()
 
-# felitronics_toml_test(<name> <source> [NO_EXCEPTIONS])
+# felitronics_toml_test(<name> <source> [NO_EXCEPTIONS] [ARGS <arguments>...])
 function(felitronics_toml_test name source)
-    cmake_parse_arguments(PARSE_ARGV 2 arg "NO_EXCEPTIONS" "" "")
+    cmake_parse_arguments(PARSE_ARGV 2 arg "NO_EXCEPTIONS" "" "ARGS")
     add_executable(${name} ${source})
     target_link_libraries(${name} PRIVATE felitronics::toml)
     target_compile_options(${name} PRIVATE ${felitronics_toml_warnings})
@@ -42,12 +42,19 @@ function(felitronics_toml_test name source)
         # suite needs between 12 and 16 MB: it fits the fixed 16 MB default heap, but with no margin to speak of.
         target_link_options(${name} PRIVATE -sALLOW_MEMORY_GROWTH=1)
     endif()
-    add_test(NAME ${name} COMMAND ${name})
+    add_test(NAME ${name} COMMAND ${name} ${arg_ARGS})
 endfunction()
 
 felitronics_toml_test(felitronics_toml_grammar_tests GrammarTests.cpp)
 felitronics_toml_test(felitronics_toml_decimal_tests DecimalTests.cpp)
 felitronics_toml_test(felitronics_toml_properties_tests PropertiesTests.cpp)
+
+# The language-neutral conformance corpus (tests/corpus/README.md): the same files any other implementation
+# of this subset can run to prove it matches, byte for byte and error position for error position.
+felitronics_toml_test(felitronics_toml_corpus_tests CorpusTests.cpp ARGS ${CMAKE_CURRENT_SOURCE_DIR}/corpus)
+if(EMSCRIPTEN)
+    target_link_options(felitronics_toml_corpus_tests PRIVATE -sNODERAWFS=1) # node reads the corpus from the host
+endif()
 
 # The canonical bytes of the generated corpus, hashed (FNV-1a). Every platform must print this same number:
 # a writer or a decimal conversion that differed anywhere would change it. A deliberate change to the writer
@@ -71,3 +78,12 @@ string(REGEX REPLACE "([][+.*?()^$|\\])" "\\\\\\1" example_regex "${example_outp
 string(REPLACE "\n" "\r?\n" example_regex "${example_regex}")
 set_tests_properties(felitronics_toml_example felitronics_toml_example_no_exceptions PROPERTIES
     PASS_REGULAR_EXPRESSION "^${example_regex}$")
+
+# Reseeds tests/corpus/ from the cases above; not part of the build (see tools/make_corpus.cpp).
+add_executable(felitronics_toml_make_corpus EXCLUDE_FROM_ALL ${PROJECT_SOURCE_DIR}/tools/make_corpus.cpp)
+target_include_directories(felitronics_toml_make_corpus PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(felitronics_toml_make_corpus PRIVATE felitronics::toml)
+target_compile_options(felitronics_toml_make_corpus PRIVATE ${felitronics_toml_warnings})
+if(MSVC)
+    target_compile_options(felitronics_toml_make_corpus PRIVATE /EHsc)
+endif()

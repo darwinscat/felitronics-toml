@@ -1,0 +1,16 @@
+{
+  "a": [
+    {
+      "x": {"type": "integer", "value": "1"},
+      "b": {
+        "y": {"type": "integer", "value": "2"}
+      }
+    },
+    {
+      "x": {"type": "integer", "value": "3"},
+      "b": {
+        "y": {"type": "integer", "value": "4"}
+      }
+    }
+  ]
+}

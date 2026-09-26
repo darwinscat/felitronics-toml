@@ -1,0 +1,6 @@
+# hi
+"name"="text"
+[a.b]
+x=[true,fal€se]
+[[c]]
+x=-1.25

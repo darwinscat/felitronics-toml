@@ -1,0 +1,97 @@
+<!-- SPDX-License-Identifier: MIT -->
+# Conformance corpus
+
+These files are the language-neutral contract of the subset described in
+[`docs/TOML-SUBSET.md`](../../docs/TOML-SUBSET.md). Any implementation of it (this C++ header, a TypeScript or
+Java port, a validator in some other language) proves that it matches by running the same files and getting
+the same trees, the same canonical bytes, and the same error codes at the same positions.
+
+```text
+valid/<name>.toml              a document the subset accepts
+valid/<name>.json              the tree it must parse to
+valid/<name>.canonical.toml    what write() must produce, when that differs from <name>.toml
+invalid/<name>.toml            a document the subset refuses
+invalid/<name>.json            {"code": "<Code>", "line": N, "column": M}, the only acceptable refusal
+```
+
+## Rules
+
+1. **Bytes, not text.** Hand every `.toml` file to the parser exactly as stored: no newline translation, no BOM
+   stripping, no decoding step of your own. Some documents are deliberately malformed (bare CR, NUL, invalid
+   UTF-8). `.gitattributes` keeps git from converting them on any checkout.
+2. **Valid documents.** `parse(<name>.toml)` succeeds and equals the tree in `<name>.json`. Writing that tree
+   produces `<name>.canonical.toml` byte for byte when the file exists, and `<name>.toml` itself when it does
+   not (the document is already canonical). The canonical text parses to the same tree again.
+3. **Invalid documents.** `parse(<name>.toml)` fails with exactly the code, line and column in `<name>.json`.
+   Codes are the names in `docs/TOML-SUBSET.md`. Lines are 1-based. Columns are 1-based **UTF-8 byte** columns,
+   not characters; end of input is one byte past the last byte. Only the first error is reported.
+
+## Tree encoding
+
+The tagged JSON of the community [toml-test](https://github.com/toml-lang/toml-test) suite, with one addition
+for this subset's exact decimal:
+
+| TOML value | JSON |
+|---|---|
+| string | `{"type": "string", "value": "<the string>"}` |
+| integer | `{"type": "integer", "value": "-42"}`: decimal text, since int64 exceeds what many JSON readers hold exactly |
+| decimal | `{"type": "decimal", "value": "-0.00"}`: the canonical spelling, see below |
+| boolean | `{"type": "bool", "value": "true"}` or `"false"` |
+| table | a JSON object, one member per key |
+| array of scalars | a JSON array of tagged scalars; `[]` is the empty array |
+| array of tables | a JSON array of objects (never empty) |
+
+**Decimal.** toml-test would tag these `float`, but this subset has no binary floats: a decimal is an exact
+`mantissa / 10^scale` whose scale is part of the value. The `value` text carries both. `"1.2300"` is mantissa
+12300 at scale 4, `"-0.00"` is a negative zero at scale 2, and there are always 1 to 9 fractional digits. To
+compare with a reader that turns decimals into binary64, convert the text with a correctly rounded conversion
+(Python's `float()`, for example): that is exactly what `Decimal::toDouble()` returns.
+
+A tagged scalar is an object with exactly the two members `type` and `value`, both JSON strings. A table's
+members are always objects or arrays, never bare strings, so a table whose keys happen to be `type` and `value`
+cannot be mistaken for a scalar. Member order in a JSON object means nothing: TOML tables are unordered
+mappings. Order is pinned by the canonical text instead. Strings are raw UTF-8 in JSON, with `\"`, `\\` and
+`\u00XX` for control characters (DEL included).
+
+## What is in it
+
+| Family | Documents |
+|---|---:|
+| One minimal witness for each of the 30 error codes, and positions counted in UTF-8 bytes | 27 invalid |
+| Table ownership: redefinition, dotted keys against headers, tables against values and arrays of tables | 10 invalid |
+| TOML 1.0 values outside the subset, and malformed numbers, strings and arrays | 33 invalid |
+| Every resource limit, at the limit and at limit + 1 | 10 valid, 11 invalid |
+| Hostile input: 1 MiB of `[`, a 100000-part key path, a 100000-item array, an unterminated 900000-byte string | 4 invalid |
+| 13 classes of invalid UTF-8, each in a comment, a key, a string, a header and an array | 65 invalid |
+| 30 forbidden control bytes in a comment, a string and a key; bare CR | 92 invalid |
+| An invalid byte (0x80, then 0x00) inserted at every offset of a document that uses every construct | 110 invalid |
+| Accepted grammar: comments, CRLF, quoted and dotted keys, headers, arrays of tables, edges of every type | 26 valid |
+| Generated: the first 16 of the 512 documents the property suite generates, and its depth-16 tree | 17 valid |
+
+53 valid documents (34 of them with a separate canonical text) and 352 invalid ones, 17.4 MB on disk (0.8 MB
+compressed): a document at the 1 MiB limit is, by nature, a megabyte.
+
+Python's `tomllib`, an independent TOML 1.0 reader, reads all 53 valid documents and all 34 canonical texts as
+the expected trees (`python3 tools/python-roundtrip.py --corpus tests/corpus`). It also rejects 322 of the 352
+invalid documents. The other 30 are valid TOML 1.0 that this subset refuses on purpose: its resource limits,
+literal and multiline strings, inline tables, nested and mixed arrays, hexadecimal, octal and binary integers,
+exponents, underscores, `inf`/`nan`, dates and times, integers beyond int64 and decimals beyond its precision.
+
+## Running it
+
+```sh
+ctest --test-dir build -R corpus --output-on-failure            # or:
+build/tests/felitronics_toml_corpus_tests tests/corpus
+python3 tools/python-roundtrip.py --corpus tests/corpus          # the tomllib cross-check
+```
+
+A port walks the two directories and applies the three rules above. Nothing else is needed: no C++ and no
+build of this repository.
+
+## Where the expectations came from
+
+The corpus was seeded by [`tools/make_corpus.cpp`](../../tools/make_corpus.cpp). Every invalid case's code, line
+and column is written in that program by hand (the same values `tests/GrammarTests.cpp` asserts), and it refuses
+to write a case the parser disagrees with. Valid trees and canonical texts are this implementation's output,
+checked independently by `tomllib` as above. From here on the files themselves are the contract: a new case is
+a new pair of files, and changing an existing expectation changes the subset, which belongs in `CHANGELOG.md`.
