@@ -1,0 +1,8 @@
+{
+  "a": {"type": "integer", "value": "48000"},
+  "b": {"type": "decimal", "value": "1000.0001"},
+  "c": {"type": "integer", "value": "-9223372036854775808"},
+  "d": {"type": "decimal", "value": "9007199.254740992"},
+  "e": {"type": "integer", "value": "10"},
+  "f": [{"type": "integer", "value": "10"}, {"type": "integer", "value": "-20"}]
+}

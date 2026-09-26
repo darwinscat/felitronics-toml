@@ -1,0 +1,44 @@
+{
+  "unknownKeys": "error",
+  "fields": [
+    {"key": "name", "type": "string"},
+    {"key": "ceiling", "type": "decimal", "min": "-12.0", "max": "0.0"},
+    {"key": "rate", "type": "integer", "optional": true, "min": "8000", "max": "192000"},
+    {"key": "dither", "type": "bool", "optional": true},
+    {"key": "freqs", "type": "array", "of": "integer", "optional": true, "min": "20", "max": "20000"},
+    {"key": "steps", "type": "array", "of": "decimal", "optional": true},
+    {"key": "labels", "type": "array", "of": "string", "optional": true},
+    {"key": "flags", "type": "array", "of": "bool", "optional": true},
+    {"key": "limiter", "type": "table", "fields": [
+      {"key": "release", "type": "decimal", "min": "0.001", "max": "1.0"},
+      {"key": "lookahead", "type": "integer", "optional": true, "min": "0", "max": "50"}
+    ]},
+    {"key": "bands", "type": "tables", "optional": true, "fields": [
+      {"key": "f", "type": "integer", "min": "20", "max": "20000"},
+      {"key": "gain", "type": "decimal", "min": "-24.0", "max": "24.0"},
+      {"key": "type", "type": "string", "optional": true}
+    ]},
+    {"key": "mode", "type": "string", "optional": true}
+  ],
+  "read": {
+    "name": {"type": "string", "value": "x"},
+    "limiter": {
+      "lookahead": {"type": "integer", "value": "50"}
+    },
+    "bands": [
+      {},
+      {
+        "f": {"type": "integer", "value": "20"},
+        "gain": {"type": "decimal", "value": "-24.00"}
+      }
+    ]
+  },
+  "problems": [
+    {"fault": "OutOfRange", "severity": "error", "path": "ceiling", "line": 2, "column": 11},
+    {"fault": "OutOfRange", "severity": "error", "path": "rate", "line": 3, "column": 8},
+    {"fault": "OutOfRange", "severity": "error", "path": "freqs[1]", "line": 4, "column": 14},
+    {"fault": "OutOfRange", "severity": "error", "path": "limiter.release", "line": 5, "column": 23},
+    {"fault": "OutOfRange", "severity": "error", "path": "bands[0].f", "line": 7, "column": 5},
+    {"fault": "OutOfRange", "severity": "error", "path": "bands[0].gain", "line": 8, "column": 8}
+  ]
+}

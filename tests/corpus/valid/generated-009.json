@@ -1,100 +1,173 @@
 {
-  "": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fE^5U'[Zs98`PxXn_3\\pU*z"},
+  "inline": {
+    "gain": {"type": "decimal", "value": "-1.25"},
+    "name": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fl$1O)I"},
+    "inner": {
+      "on": {"type": "bool", "value": "true"}
+    },
+    "cells": [
+      {
+        "n": {"type": "integer", "value": "1"}
+      },
+      {
+        "": {"type": "string", "value": "second"}
+      }
+    ],
+    "list": [{"type": "integer", "value": "3"}, {"type": "integer", "value": "-4"}]
+  },
+  "rows": [
+    {
+      "index": {"type": "integer", "value": "0"},
+      "text": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fQ~_Ff#&8=:xOQ 7[_o_$>t^zUFO\\DV9I>Jt.Woq'|:|0@P"}
+    }
+  ],
+  "empty inline": {},
+  "": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fU|2r&U50Z;m)P\"\"B`*aDm6 L<N=}cgkm35:-o*zSnb!"},
   "key\u000a\"\\é\u0009": {"type": "string", "value": "plain"},
   "ключ 日本語 😀": {"type": "string", "value": "a quoted key in three scripts"},
   "minimum": {"type": "integer", "value": "-9223372036854775808"},
   "maximum": {"type": "integer", "value": "9223372036854775807"},
-  "integer": {"type": "integer", "value": "2893302922238897101"},
+  "integer": {"type": "integer", "value": "8874691984863484347"},
   "true": {"type": "bool", "value": "true"},
   "false": {"type": "bool", "value": "false"},
   "empty": [],
   "ints": [{"type": "integer", "value": "0"}, {"type": "integer", "value": "-1"}, {"type": "integer", "value": "-9223372036854775808"}],
   "bools": [{"type": "bool", "value": "true"}, {"type": "bool", "value": "false"}],
-  "strings": [{"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fY=ht0"}, {"type": "string", "value": ""}, {"type": "string", "value": "#[],=."}],
-  "d1": {"type": "decimal", "value": "807063366301297.3"},
-  "d2": {"type": "decimal", "value": "52392542556376.99"},
-  "d3": {"type": "decimal", "value": "3600937193030.086"},
-  "d4": {"type": "decimal", "value": "256630649760.5503"},
-  "d5": {"type": "decimal", "value": "43212885177.28833"},
-  "d6": {"type": "decimal", "value": "3963807721.615688"},
-  "d7": {"type": "decimal", "value": "108403459.5654138"},
-  "d8": {"type": "decimal", "value": "42505938.44554546"},
-  "d9": {"type": "decimal", "value": "2972140.787527768"},
-  "decimals": [{"type": "decimal", "value": "807063366301297.3"}, {"type": "decimal", "value": "-807063366301297.3"}, {"type": "decimal", "value": "0.0"}, {"type": "decimal", "value": "-0.0"}, {"type": "decimal", "value": "900719925474099.2"}, {"type": "decimal", "value": "-900719925474099.2"}, {"type": "decimal", "value": "52392542556376.99"}, {"type": "decimal", "value": "-52392542556376.99"}, {"type": "decimal", "value": "0.00"}, {"type": "decimal", "value": "-0.00"}, {"type": "decimal", "value": "90071992547409.92"}, {"type": "decimal", "value": "-90071992547409.92"}, {"type": "decimal", "value": "3600937193030.086"}, {"type": "decimal", "value": "-3600937193030.086"}, {"type": "decimal", "value": "0.000"}, {"type": "decimal", "value": "-0.000"}, {"type": "decimal", "value": "9007199254740.992"}, {"type": "decimal", "value": "-9007199254740.992"}, {"type": "decimal", "value": "256630649760.5503"}, {"type": "decimal", "value": "-256630649760.5503"}, {"type": "decimal", "value": "0.0000"}, {"type": "decimal", "value": "-0.0000"}, {"type": "decimal", "value": "900719925474.0992"}, {"type": "decimal", "value": "-900719925474.0992"}, {"type": "decimal", "value": "43212885177.28833"}, {"type": "decimal", "value": "-43212885177.28833"}, {"type": "decimal", "value": "0.00000"}, {"type": "decimal", "value": "-0.00000"}, {"type": "decimal", "value": "90071992547.40992"}, {"type": "decimal", "value": "-90071992547.40992"}, {"type": "decimal", "value": "3963807721.615688"}, {"type": "decimal", "value": "-3963807721.615688"}, {"type": "decimal", "value": "0.000000"}, {"type": "decimal", "value": "-0.000000"}, {"type": "decimal", "value": "9007199254.740992"}, {"type": "decimal", "value": "-9007199254.740992"}, {"type": "decimal", "value": "108403459.5654138"}, {"type": "decimal", "value": "-108403459.5654138"}, {"type": "decimal", "value": "0.0000000"}, {"type": "decimal", "value": "-0.0000000"}, {"type": "decimal", "value": "900719925.4740992"}, {"type": "decimal", "value": "-900719925.4740992"}, {"type": "decimal", "value": "42505938.44554546"}, {"type": "decimal", "value": "-42505938.44554546"}, {"type": "decimal", "value": "0.00000000"}, {"type": "decimal", "value": "-0.00000000"}, {"type": "decimal", "value": "90071992.54740992"}, {"type": "decimal", "value": "-90071992.54740992"}, {"type": "decimal", "value": "2972140.787527768"}, {"type": "decimal", "value": "-2972140.787527768"}, {"type": "decimal", "value": "0.000000000"}, {"type": "decimal", "value": "-0.000000000"}, {"type": "decimal", "value": "9007199.254740992"}, {"type": "decimal", "value": "-9007199.254740992"}],
+  "strings": [{"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f/"}, {"type": "string", "value": ""}, {"type": "string", "value": "#[],=."}],
+  "d1": {"type": "decimal", "value": "154523629275203.5"},
+  "d2": {"type": "decimal", "value": "87551457207977.35"},
+  "d3": {"type": "decimal", "value": "4011216032464.586"},
+  "d4": {"type": "decimal", "value": "365365575923.0473"},
+  "d5": {"type": "decimal", "value": "25901061152.34821"},
+  "d6": {"type": "decimal", "value": "4695802479.841855"},
+  "d7": {"type": "decimal", "value": "426418896.9171973"},
+  "d8": {"type": "decimal", "value": "64025097.88187496"},
+  "d9": {"type": "decimal", "value": "4295496.746269816"},
+  "decimals": [{"type": "decimal", "value": "154523629275203.5"}, {"type": "decimal", "value": "-154523629275203.5"}, {"type": "decimal", "value": "0.0"}, {"type": "decimal", "value": "-0.0"}, {"type": "decimal", "value": "900719925474099.2"}, {"type": "decimal", "value": "-900719925474099.2"}, {"type": "decimal", "value": "87551457207977.35"}, {"type": "decimal", "value": "-87551457207977.35"}, {"type": "decimal", "value": "0.00"}, {"type": "decimal", "value": "-0.00"}, {"type": "decimal", "value": "90071992547409.92"}, {"type": "decimal", "value": "-90071992547409.92"}, {"type": "decimal", "value": "4011216032464.586"}, {"type": "decimal", "value": "-4011216032464.586"}, {"type": "decimal", "value": "0.000"}, {"type": "decimal", "value": "-0.000"}, {"type": "decimal", "value": "9007199254740.992"}, {"type": "decimal", "value": "-9007199254740.992"}, {"type": "decimal", "value": "365365575923.0473"}, {"type": "decimal", "value": "-365365575923.0473"}, {"type": "decimal", "value": "0.0000"}, {"type": "decimal", "value": "-0.0000"}, {"type": "decimal", "value": "900719925474.0992"}, {"type": "decimal", "value": "-900719925474.0992"}, {"type": "decimal", "value": "25901061152.34821"}, {"type": "decimal", "value": "-25901061152.34821"}, {"type": "decimal", "value": "0.00000"}, {"type": "decimal", "value": "-0.00000"}, {"type": "decimal", "value": "90071992547.40992"}, {"type": "decimal", "value": "-90071992547.40992"}, {"type": "decimal", "value": "4695802479.841855"}, {"type": "decimal", "value": "-4695802479.841855"}, {"type": "decimal", "value": "0.000000"}, {"type": "decimal", "value": "-0.000000"}, {"type": "decimal", "value": "9007199254.740992"}, {"type": "decimal", "value": "-9007199254.740992"}, {"type": "decimal", "value": "426418896.9171973"}, {"type": "decimal", "value": "-426418896.9171973"}, {"type": "decimal", "value": "0.0000000"}, {"type": "decimal", "value": "-0.0000000"}, {"type": "decimal", "value": "900719925.4740992"}, {"type": "decimal", "value": "-900719925.4740992"}, {"type": "decimal", "value": "64025097.88187496"}, {"type": "decimal", "value": "-64025097.88187496"}, {"type": "decimal", "value": "0.00000000"}, {"type": "decimal", "value": "-0.00000000"}, {"type": "decimal", "value": "90071992.54740992"}, {"type": "decimal", "value": "-90071992.54740992"}, {"type": "decimal", "value": "4295496.746269816"}, {"type": "decimal", "value": "-4295496.746269816"}, {"type": "decimal", "value": "0.000000000"}, {"type": "decimal", "value": "-0.000000000"}, {"type": "decimal", "value": "9007199.254740992"}, {"type": "decimal", "value": "-9007199.254740992"}],
   "first table": {
-    "": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fW,mq@7urn@UkLN%a,Qy2W3"},
+    "inline": {
+      "gain": {"type": "decimal", "value": "-1.25"},
+      "name": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f s.s)dH\\l\"bN9Z9B@>w`2l6Z4KPq&#1c+fzg5)&3u\"'[/&"},
+      "inner": {
+        "on": {"type": "bool", "value": "true"}
+      },
+      "cells": [
+        {
+          "n": {"type": "integer", "value": "1"}
+        },
+        {
+          "": {"type": "string", "value": "second"}
+        }
+      ],
+      "list": [{"type": "integer", "value": "3"}, {"type": "integer", "value": "-4"}]
+    },
+    "rows": [
+      {
+        "index": {"type": "integer", "value": "0"},
+        "text": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fv4zO^PQTT=J>A]^t(mJeyW\\y|o^yvD"}
+      }
+    ],
+    "empty inline": {},
+    "": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f3Tu;o&gDZO%"},
     "key\u000a\"\\é\u0009": {"type": "string", "value": "plain"},
     "ключ 日本語 😀": {"type": "string", "value": "a quoted key in three scripts"},
     "minimum": {"type": "integer", "value": "-9223372036854775808"},
     "maximum": {"type": "integer", "value": "9223372036854775807"},
-    "integer": {"type": "integer", "value": "1083632147273230765"},
+    "integer": {"type": "integer", "value": "8095429228090030459"},
     "true": {"type": "bool", "value": "true"},
     "false": {"type": "bool", "value": "false"},
     "empty": [],
     "ints": [{"type": "integer", "value": "0"}, {"type": "integer", "value": "-1"}, {"type": "integer", "value": "-9223372036854775808"}],
     "bools": [{"type": "bool", "value": "true"}, {"type": "bool", "value": "false"}],
-    "strings": [{"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fllai@"}, {"type": "string", "value": ""}, {"type": "string", "value": "#[],=."}],
-    "d1": {"type": "decimal", "value": "134926793315620.3"},
-    "d2": {"type": "decimal", "value": "14165359851552.55"},
-    "d3": {"type": "decimal", "value": "4202021830499.686"},
-    "d4": {"type": "decimal", "value": "571917285249.7246"},
-    "d5": {"type": "decimal", "value": "82230288319.87669"},
-    "d6": {"type": "decimal", "value": "5230041245.013573"},
-    "d7": {"type": "decimal", "value": "170218541.7409947"},
-    "d8": {"type": "decimal", "value": "11308854.33187223"},
-    "d9": {"type": "decimal", "value": "2320016.103725842"},
-    "decimals": [{"type": "decimal", "value": "134926793315620.3"}, {"type": "decimal", "value": "-134926793315620.3"}, {"type": "decimal", "value": "0.0"}, {"type": "decimal", "value": "-0.0"}, {"type": "decimal", "value": "900719925474099.2"}, {"type": "decimal", "value": "-900719925474099.2"}, {"type": "decimal", "value": "14165359851552.55"}, {"type": "decimal", "value": "-14165359851552.55"}, {"type": "decimal", "value": "0.00"}, {"type": "decimal", "value": "-0.00"}, {"type": "decimal", "value": "90071992547409.92"}, {"type": "decimal", "value": "-90071992547409.92"}, {"type": "decimal", "value": "4202021830499.686"}, {"type": "decimal", "value": "-4202021830499.686"}, {"type": "decimal", "value": "0.000"}, {"type": "decimal", "value": "-0.000"}, {"type": "decimal", "value": "9007199254740.992"}, {"type": "decimal", "value": "-9007199254740.992"}, {"type": "decimal", "value": "571917285249.7246"}, {"type": "decimal", "value": "-571917285249.7246"}, {"type": "decimal", "value": "0.0000"}, {"type": "decimal", "value": "-0.0000"}, {"type": "decimal", "value": "900719925474.0992"}, {"type": "decimal", "value": "-900719925474.0992"}, {"type": "decimal", "value": "82230288319.87669"}, {"type": "decimal", "value": "-82230288319.87669"}, {"type": "decimal", "value": "0.00000"}, {"type": "decimal", "value": "-0.00000"}, {"type": "decimal", "value": "90071992547.40992"}, {"type": "decimal", "value": "-90071992547.40992"}, {"type": "decimal", "value": "5230041245.013573"}, {"type": "decimal", "value": "-5230041245.013573"}, {"type": "decimal", "value": "0.000000"}, {"type": "decimal", "value": "-0.000000"}, {"type": "decimal", "value": "9007199254.740992"}, {"type": "decimal", "value": "-9007199254.740992"}, {"type": "decimal", "value": "170218541.7409947"}, {"type": "decimal", "value": "-170218541.7409947"}, {"type": "decimal", "value": "0.0000000"}, {"type": "decimal", "value": "-0.0000000"}, {"type": "decimal", "value": "900719925.4740992"}, {"type": "decimal", "value": "-900719925.4740992"}, {"type": "decimal", "value": "11308854.33187223"}, {"type": "decimal", "value": "-11308854.33187223"}, {"type": "decimal", "value": "0.00000000"}, {"type": "decimal", "value": "-0.00000000"}, {"type": "decimal", "value": "90071992.54740992"}, {"type": "decimal", "value": "-90071992.54740992"}, {"type": "decimal", "value": "2320016.103725842"}, {"type": "decimal", "value": "-2320016.103725842"}, {"type": "decimal", "value": "0.000000000"}, {"type": "decimal", "value": "-0.000000000"}, {"type": "decimal", "value": "9007199.254740992"}, {"type": "decimal", "value": "-9007199.254740992"}],
+    "strings": [{"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fc"}, {"type": "string", "value": ""}, {"type": "string", "value": "#[],=."}],
+    "d1": {"type": "decimal", "value": "6091885242289.6"},
+    "d2": {"type": "decimal", "value": "19576120066287.59"},
+    "d3": {"type": "decimal", "value": "6450563693379.704"},
+    "d4": {"type": "decimal", "value": "343809607848.5548"},
+    "d5": {"type": "decimal", "value": "65969174483.15073"},
+    "d6": {"type": "decimal", "value": "6589587025.455942"},
+    "d7": {"type": "decimal", "value": "822816892.9148126"},
+    "d8": {"type": "decimal", "value": "47235086.48902087"},
+    "d9": {"type": "decimal", "value": "3735781.481817658"},
+    "decimals": [{"type": "decimal", "value": "6091885242289.6"}, {"type": "decimal", "value": "-6091885242289.6"}, {"type": "decimal", "value": "0.0"}, {"type": "decimal", "value": "-0.0"}, {"type": "decimal", "value": "900719925474099.2"}, {"type": "decimal", "value": "-900719925474099.2"}, {"type": "decimal", "value": "19576120066287.59"}, {"type": "decimal", "value": "-19576120066287.59"}, {"type": "decimal", "value": "0.00"}, {"type": "decimal", "value": "-0.00"}, {"type": "decimal", "value": "90071992547409.92"}, {"type": "decimal", "value": "-90071992547409.92"}, {"type": "decimal", "value": "6450563693379.704"}, {"type": "decimal", "value": "-6450563693379.704"}, {"type": "decimal", "value": "0.000"}, {"type": "decimal", "value": "-0.000"}, {"type": "decimal", "value": "9007199254740.992"}, {"type": "decimal", "value": "-9007199254740.992"}, {"type": "decimal", "value": "343809607848.5548"}, {"type": "decimal", "value": "-343809607848.5548"}, {"type": "decimal", "value": "0.0000"}, {"type": "decimal", "value": "-0.0000"}, {"type": "decimal", "value": "900719925474.0992"}, {"type": "decimal", "value": "-900719925474.0992"}, {"type": "decimal", "value": "65969174483.15073"}, {"type": "decimal", "value": "-65969174483.15073"}, {"type": "decimal", "value": "0.00000"}, {"type": "decimal", "value": "-0.00000"}, {"type": "decimal", "value": "90071992547.40992"}, {"type": "decimal", "value": "-90071992547.40992"}, {"type": "decimal", "value": "6589587025.455942"}, {"type": "decimal", "value": "-6589587025.455942"}, {"type": "decimal", "value": "0.000000"}, {"type": "decimal", "value": "-0.000000"}, {"type": "decimal", "value": "9007199254.740992"}, {"type": "decimal", "value": "-9007199254.740992"}, {"type": "decimal", "value": "822816892.9148126"}, {"type": "decimal", "value": "-822816892.9148126"}, {"type": "decimal", "value": "0.0000000"}, {"type": "decimal", "value": "-0.0000000"}, {"type": "decimal", "value": "900719925.4740992"}, {"type": "decimal", "value": "-900719925.4740992"}, {"type": "decimal", "value": "47235086.48902087"}, {"type": "decimal", "value": "-47235086.48902087"}, {"type": "decimal", "value": "0.00000000"}, {"type": "decimal", "value": "-0.00000000"}, {"type": "decimal", "value": "90071992.54740992"}, {"type": "decimal", "value": "-90071992.54740992"}, {"type": "decimal", "value": "3735781.481817658"}, {"type": "decimal", "value": "-3735781.481817658"}, {"type": "decimal", "value": "0.000000000"}, {"type": "decimal", "value": "-0.000000000"}, {"type": "decimal", "value": "9007199.254740992"}, {"type": "decimal", "value": "-9007199.254740992"}],
     "first table": {
-      "": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f)i09A,Y[{rT~g/gf:Z9\\!Vrz^')g-+"},
+      "inline": {
+        "gain": {"type": "decimal", "value": "-1.25"},
+        "name": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fvj;fsR>{QOdSk[PY(au\"gYxL9Tzbtz"},
+        "inner": {
+          "on": {"type": "bool", "value": "true"}
+        },
+        "cells": [
+          {
+            "n": {"type": "integer", "value": "1"}
+          },
+          {
+            "": {"type": "string", "value": "second"}
+          }
+        ],
+        "list": [{"type": "integer", "value": "3"}, {"type": "integer", "value": "-4"}]
+      },
+      "rows": [
+        {
+          "index": {"type": "integer", "value": "0"},
+          "text": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f{XhMyBr;l{I5}[vXSR85&apN)=FY1yVsdf>zNp$s{`]`Au*%F6b#$1EKcao48("}
+        },
+        {
+          "index": {"type": "integer", "value": "1"},
+          "text": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f*L,.F9DiQb|"}
+        }
+      ],
+      "empty inline": {},
+      "": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f[~A=)y|65Wt!Y$*qB^QIh+-|\\d_[}Zc8|6VZ*6O}_Hi)9Q5CF24yE~N"},
       "key\u000a\"\\é\u0009": {"type": "string", "value": "plain"},
       "ключ 日本語 😀": {"type": "string", "value": "a quoted key in three scripts"},
       "minimum": {"type": "integer", "value": "-9223372036854775808"},
       "maximum": {"type": "integer", "value": "9223372036854775807"},
-      "integer": {"type": "integer", "value": "7669705468532351461"},
+      "integer": {"type": "integer", "value": "5739723474445673783"},
       "true": {"type": "bool", "value": "true"},
       "false": {"type": "bool", "value": "false"},
       "empty": [],
       "ints": [{"type": "integer", "value": "0"}, {"type": "integer", "value": "-1"}, {"type": "integer", "value": "-9223372036854775808"}],
       "bools": [{"type": "bool", "value": "true"}, {"type": "bool", "value": "false"}],
-      "strings": [{"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f[]Os[r[cojhz= k?Ju@&kiB`32V^S+LH3+8GMe5`{*>x#-FXgUrv("}, {"type": "string", "value": ""}, {"type": "string", "value": "#[],=."}],
-      "d1": {"type": "decimal", "value": "482529035546446.8"},
-      "d2": {"type": "decimal", "value": "39194927272293.27"},
-      "d3": {"type": "decimal", "value": "8124615257250.367"},
-      "d4": {"type": "decimal", "value": "380584600109.6618"},
-      "d5": {"type": "decimal", "value": "33398544493.30859"},
-      "d6": {"type": "decimal", "value": "353961079.818892"},
-      "d7": {"type": "decimal", "value": "376655838.3467640"},
-      "d8": {"type": "decimal", "value": "32345160.17063429"},
-      "d9": {"type": "decimal", "value": "946456.235782865"},
-      "decimals": [{"type": "decimal", "value": "482529035546446.8"}, {"type": "decimal", "value": "-482529035546446.8"}, {"type": "decimal", "value": "0.0"}, {"type": "decimal", "value": "-0.0"}, {"type": "decimal", "value": "900719925474099.2"}, {"type": "decimal", "value": "-900719925474099.2"}, {"type": "decimal", "value": "39194927272293.27"}, {"type": "decimal", "value": "-39194927272293.27"}, {"type": "decimal", "value": "0.00"}, {"type": "decimal", "value": "-0.00"}, {"type": "decimal", "value": "90071992547409.92"}, {"type": "decimal", "value": "-90071992547409.92"}, {"type": "decimal", "value": "8124615257250.367"}, {"type": "decimal", "value": "-8124615257250.367"}, {"type": "decimal", "value": "0.000"}, {"type": "decimal", "value": "-0.000"}, {"type": "decimal", "value": "9007199254740.992"}, {"type": "decimal", "value": "-9007199254740.992"}, {"type": "decimal", "value": "380584600109.6618"}, {"type": "decimal", "value": "-380584600109.6618"}, {"type": "decimal", "value": "0.0000"}, {"type": "decimal", "value": "-0.0000"}, {"type": "decimal", "value": "900719925474.0992"}, {"type": "decimal", "value": "-900719925474.0992"}, {"type": "decimal", "value": "33398544493.30859"}, {"type": "decimal", "value": "-33398544493.30859"}, {"type": "decimal", "value": "0.00000"}, {"type": "decimal", "value": "-0.00000"}, {"type": "decimal", "value": "90071992547.40992"}, {"type": "decimal", "value": "-90071992547.40992"}, {"type": "decimal", "value": "353961079.818892"}, {"type": "decimal", "value": "-353961079.818892"}, {"type": "decimal", "value": "0.000000"}, {"type": "decimal", "value": "-0.000000"}, {"type": "decimal", "value": "9007199254.740992"}, {"type": "decimal", "value": "-9007199254.740992"}, {"type": "decimal", "value": "376655838.3467640"}, {"type": "decimal", "value": "-376655838.3467640"}, {"type": "decimal", "value": "0.0000000"}, {"type": "decimal", "value": "-0.0000000"}, {"type": "decimal", "value": "900719925.4740992"}, {"type": "decimal", "value": "-900719925.4740992"}, {"type": "decimal", "value": "32345160.17063429"}, {"type": "decimal", "value": "-32345160.17063429"}, {"type": "decimal", "value": "0.00000000"}, {"type": "decimal", "value": "-0.00000000"}, {"type": "decimal", "value": "90071992.54740992"}, {"type": "decimal", "value": "-90071992.54740992"}, {"type": "decimal", "value": "946456.235782865"}, {"type": "decimal", "value": "-946456.235782865"}, {"type": "decimal", "value": "0.000000000"}, {"type": "decimal", "value": "-0.000000000"}, {"type": "decimal", "value": "9007199.254740992"}, {"type": "decimal", "value": "-9007199.254740992"}],
+      "strings": [{"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007ffQ[oZL 9K\" (mdm:]TrY+hscCkss}kQ\\%l6GX48kX1]yuqagv{Qt|-Ohe"}, {"type": "string", "value": ""}, {"type": "string", "value": "#[],=."}],
+      "d1": {"type": "decimal", "value": "705663251816961.9"},
+      "d2": {"type": "decimal", "value": "38922389982778.72"},
+      "d3": {"type": "decimal", "value": "548399916270.321"},
+      "d4": {"type": "decimal", "value": "540069685582.9705"},
+      "d5": {"type": "decimal", "value": "31018600931.15279"},
+      "d6": {"type": "decimal", "value": "2116665362.417578"},
+      "d7": {"type": "decimal", "value": "650194647.4520578"},
+      "d8": {"type": "decimal", "value": "54300114.81729348"},
+      "d9": {"type": "decimal", "value": "6020986.229942278"},
+      "decimals": [{"type": "decimal", "value": "705663251816961.9"}, {"type": "decimal", "value": "-705663251816961.9"}, {"type": "decimal", "value": "0.0"}, {"type": "decimal", "value": "-0.0"}, {"type": "decimal", "value": "900719925474099.2"}, {"type": "decimal", "value": "-900719925474099.2"}, {"type": "decimal", "value": "38922389982778.72"}, {"type": "decimal", "value": "-38922389982778.72"}, {"type": "decimal", "value": "0.00"}, {"type": "decimal", "value": "-0.00"}, {"type": "decimal", "value": "90071992547409.92"}, {"type": "decimal", "value": "-90071992547409.92"}, {"type": "decimal", "value": "548399916270.321"}, {"type": "decimal", "value": "-548399916270.321"}, {"type": "decimal", "value": "0.000"}, {"type": "decimal", "value": "-0.000"}, {"type": "decimal", "value": "9007199254740.992"}, {"type": "decimal", "value": "-9007199254740.992"}, {"type": "decimal", "value": "540069685582.9705"}, {"type": "decimal", "value": "-540069685582.9705"}, {"type": "decimal", "value": "0.0000"}, {"type": "decimal", "value": "-0.0000"}, {"type": "decimal", "value": "900719925474.0992"}, {"type": "decimal", "value": "-900719925474.0992"}, {"type": "decimal", "value": "31018600931.15279"}, {"type": "decimal", "value": "-31018600931.15279"}, {"type": "decimal", "value": "0.00000"}, {"type": "decimal", "value": "-0.00000"}, {"type": "decimal", "value": "90071992547.40992"}, {"type": "decimal", "value": "-90071992547.40992"}, {"type": "decimal", "value": "2116665362.417578"}, {"type": "decimal", "value": "-2116665362.417578"}, {"type": "decimal", "value": "0.000000"}, {"type": "decimal", "value": "-0.000000"}, {"type": "decimal", "value": "9007199254.740992"}, {"type": "decimal", "value": "-9007199254.740992"}, {"type": "decimal", "value": "650194647.4520578"}, {"type": "decimal", "value": "-650194647.4520578"}, {"type": "decimal", "value": "0.0000000"}, {"type": "decimal", "value": "-0.0000000"}, {"type": "decimal", "value": "900719925.4740992"}, {"type": "decimal", "value": "-900719925.4740992"}, {"type": "decimal", "value": "54300114.81729348"}, {"type": "decimal", "value": "-54300114.81729348"}, {"type": "decimal", "value": "0.00000000"}, {"type": "decimal", "value": "-0.00000000"}, {"type": "decimal", "value": "90071992.54740992"}, {"type": "decimal", "value": "-90071992.54740992"}, {"type": "decimal", "value": "6020986.229942278"}, {"type": "decimal", "value": "-6020986.229942278"}, {"type": "decimal", "value": "0.000000000"}, {"type": "decimal", "value": "-0.000000000"}, {"type": "decimal", "value": "9007199.254740992"}, {"type": "decimal", "value": "-9007199.254740992"}],
       "first table": {
-        "": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fN<:dJSQNXT>@*T,E&x879qY&$vze?`W^@H<0`&@k6#+kwHw3CVV_;L-78&k~~z"},
+        "": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fcU\\o9f"},
         "key\u000a\"\\é\u0009": {"type": "string", "value": "plain"},
         "ключ 日本語 😀": {"type": "string", "value": "a quoted key in three scripts"},
         "minimum": {"type": "integer", "value": "-9223372036854775808"},
         "maximum": {"type": "integer", "value": "9223372036854775807"},
-        "integer": {"type": "integer", "value": "8125886387944567685"},
+        "integer": {"type": "integer", "value": "882922024210870525"},
         "true": {"type": "bool", "value": "true"},
         "false": {"type": "bool", "value": "false"},
         "empty": [],
         "ints": [{"type": "integer", "value": "0"}, {"type": "integer", "value": "-1"}, {"type": "integer", "value": "-9223372036854775808"}],
         "bools": [{"type": "bool", "value": "true"}, {"type": "bool", "value": "false"}],
-        "strings": [{"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fn;Mo_fbffi2qSO$JJ{p:2_9&cwjQ2mi:R4;\\RC?N%[>#_}H/yp`JQ"}, {"type": "string", "value": ""}, {"type": "string", "value": "#[],=."}],
-        "d1": {"type": "decimal", "value": "824159109222017.2"},
-        "d2": {"type": "decimal", "value": "2683290727188.71"},
-        "d3": {"type": "decimal", "value": "2864755846188.535"},
-        "d4": {"type": "decimal", "value": "440358021141.7188"},
-        "d5": {"type": "decimal", "value": "23033836149.94627"},
-        "d6": {"type": "decimal", "value": "756810337.654537"},
-        "d7": {"type": "decimal", "value": "630158391.1250262"},
-        "d8": {"type": "decimal", "value": "81544162.54360346"},
-        "d9": {"type": "decimal", "value": "5507934.855141007"},
-        "decimals": [{"type": "decimal", "value": "824159109222017.2"}, {"type": "decimal", "value": "-824159109222017.2"}, {"type": "decimal", "value": "0.0"}, {"type": "decimal", "value": "-0.0"}, {"type": "decimal", "value": "900719925474099.2"}, {"type": "decimal", "value": "-900719925474099.2"}, {"type": "decimal", "value": "2683290727188.71"}, {"type": "decimal", "value": "-2683290727188.71"}, {"type": "decimal", "value": "0.00"}, {"type": "decimal", "value": "-0.00"}, {"type": "decimal", "value": "90071992547409.92"}, {"type": "decimal", "value": "-90071992547409.92"}, {"type": "decimal", "value": "2864755846188.535"}, {"type": "decimal", "value": "-2864755846188.535"}, {"type": "decimal", "value": "0.000"}, {"type": "decimal", "value": "-0.000"}, {"type": "decimal", "value": "9007199254740.992"}, {"type": "decimal", "value": "-9007199254740.992"}, {"type": "decimal", "value": "440358021141.7188"}, {"type": "decimal", "value": "-440358021141.7188"}, {"type": "decimal", "value": "0.0000"}, {"type": "decimal", "value": "-0.0000"}, {"type": "decimal", "value": "900719925474.0992"}, {"type": "decimal", "value": "-900719925474.0992"}, {"type": "decimal", "value": "23033836149.94627"}, {"type": "decimal", "value": "-23033836149.94627"}, {"type": "decimal", "value": "0.00000"}, {"type": "decimal", "value": "-0.00000"}, {"type": "decimal", "value": "90071992547.40992"}, {"type": "decimal", "value": "-90071992547.40992"}, {"type": "decimal", "value": "756810337.654537"}, {"type": "decimal", "value": "-756810337.654537"}, {"type": "decimal", "value": "0.000000"}, {"type": "decimal", "value": "-0.000000"}, {"type": "decimal", "value": "9007199254.740992"}, {"type": "decimal", "value": "-9007199254.740992"}, {"type": "decimal", "value": "630158391.1250262"}, {"type": "decimal", "value": "-630158391.1250262"}, {"type": "decimal", "value": "0.0000000"}, {"type": "decimal", "value": "-0.0000000"}, {"type": "decimal", "value": "900719925.4740992"}, {"type": "decimal", "value": "-900719925.4740992"}, {"type": "decimal", "value": "81544162.54360346"}, {"type": "decimal", "value": "-81544162.54360346"}, {"type": "decimal", "value": "0.00000000"}, {"type": "decimal", "value": "-0.00000000"}, {"type": "decimal", "value": "90071992.54740992"}, {"type": "decimal", "value": "-90071992.54740992"}, {"type": "decimal", "value": "5507934.855141007"}, {"type": "decimal", "value": "-5507934.855141007"}, {"type": "decimal", "value": "0.000000000"}, {"type": "decimal", "value": "-0.000000000"}, {"type": "decimal", "value": "9007199.254740992"}, {"type": "decimal", "value": "-9007199.254740992"}]
+        "strings": [{"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f]f8|w9`;U@2w^QcBCy85Q -|kvbZ,JpN4<LlE"}, {"type": "string", "value": ""}, {"type": "string", "value": "#[],=."}],
+        "d1": {"type": "decimal", "value": "834700514290921.4"},
+        "d2": {"type": "decimal", "value": "45592832365046.53"},
+        "d3": {"type": "decimal", "value": "1897158864403.476"},
+        "d4": {"type": "decimal", "value": "656308636274.7734"},
+        "d5": {"type": "decimal", "value": "61110194613.88365"},
+        "d6": {"type": "decimal", "value": "4709022399.235360"},
+        "d7": {"type": "decimal", "value": "245824911.0769294"},
+        "d8": {"type": "decimal", "value": "39669312.33522046"},
+        "d9": {"type": "decimal", "value": "1454353.064306281"},
+        "decimals": [{"type": "decimal", "value": "834700514290921.4"}, {"type": "decimal", "value": "-834700514290921.4"}, {"type": "decimal", "value": "0.0"}, {"type": "decimal", "value": "-0.0"}, {"type": "decimal", "value": "900719925474099.2"}, {"type": "decimal", "value": "-900719925474099.2"}, {"type": "decimal", "value": "45592832365046.53"}, {"type": "decimal", "value": "-45592832365046.53"}, {"type": "decimal", "value": "0.00"}, {"type": "decimal", "value": "-0.00"}, {"type": "decimal", "value": "90071992547409.92"}, {"type": "decimal", "value": "-90071992547409.92"}, {"type": "decimal", "value": "1897158864403.476"}, {"type": "decimal", "value": "-1897158864403.476"}, {"type": "decimal", "value": "0.000"}, {"type": "decimal", "value": "-0.000"}, {"type": "decimal", "value": "9007199254740.992"}, {"type": "decimal", "value": "-9007199254740.992"}, {"type": "decimal", "value": "656308636274.7734"}, {"type": "decimal", "value": "-656308636274.7734"}, {"type": "decimal", "value": "0.0000"}, {"type": "decimal", "value": "-0.0000"}, {"type": "decimal", "value": "900719925474.0992"}, {"type": "decimal", "value": "-900719925474.0992"}, {"type": "decimal", "value": "61110194613.88365"}, {"type": "decimal", "value": "-61110194613.88365"}, {"type": "decimal", "value": "0.00000"}, {"type": "decimal", "value": "-0.00000"}, {"type": "decimal", "value": "90071992547.40992"}, {"type": "decimal", "value": "-90071992547.40992"}, {"type": "decimal", "value": "4709022399.235360"}, {"type": "decimal", "value": "-4709022399.235360"}, {"type": "decimal", "value": "0.000000"}, {"type": "decimal", "value": "-0.000000"}, {"type": "decimal", "value": "9007199254.740992"}, {"type": "decimal", "value": "-9007199254.740992"}, {"type": "decimal", "value": "245824911.0769294"}, {"type": "decimal", "value": "-245824911.0769294"}, {"type": "decimal", "value": "0.0000000"}, {"type": "decimal", "value": "-0.0000000"}, {"type": "decimal", "value": "900719925.4740992"}, {"type": "decimal", "value": "-900719925.4740992"}, {"type": "decimal", "value": "39669312.33522046"}, {"type": "decimal", "value": "-39669312.33522046"}, {"type": "decimal", "value": "0.00000000"}, {"type": "decimal", "value": "-0.00000000"}, {"type": "decimal", "value": "90071992.54740992"}, {"type": "decimal", "value": "-90071992.54740992"}, {"type": "decimal", "value": "1454353.064306281"}, {"type": "decimal", "value": "-1454353.064306281"}, {"type": "decimal", "value": "0.000000000"}, {"type": "decimal", "value": "-0.000000000"}, {"type": "decimal", "value": "9007199.254740992"}, {"type": "decimal", "value": "-9007199.254740992"}]
       },
       "second.table": {},
       "versions": [
         {
-          "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fdF^pcC6lsR>/);@64].7L.e,mEmZ1Nq%A\\4=`Akx}6>,J.n.gf8es"},
+          "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fqL2uPZ9jxvYYiNQ&v!Y.;"},
           "enabled": {"type": "bool", "value": "true"},
           "settings": {
             "gain": {"type": "decimal", "value": "-1.25"}
@@ -106,7 +179,7 @@
           ]
         },
         {
-          "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f$lq6l_Y[+owQZZ9c}D!,}i"},
+          "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f}_&Wv`t!9hRzkM[-WWA>x!"},
           "enabled": {"type": "bool", "value": "true"},
           "settings": {
             "gain": {"type": "decimal", "value": "-1.25"}
@@ -118,7 +191,7 @@
           ]
         },
         {
-          "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f\\H^29{9A{3NgC}"},
+          "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fpoE\"OC!K;OuC_F"},
           "enabled": {"type": "bool", "value": "true"},
           "settings": {
             "gain": {"type": "decimal", "value": "-1.25"}
@@ -134,7 +207,7 @@
     "second.table": {},
     "versions": [
       {
-        "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fn-'z,dQ`ql4Jb#AlR\\7:PHRNFm3W7]n-}qGY<M[L^iS<H d-+Zs[f"},
+        "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f,C0GLNy~w%s}JO_{d2tf6+xxs8/dfRm;cA2zH.L%<ClB?Vfj/1Q,vbW_znz*f"},
         "enabled": {"type": "bool", "value": "true"},
         "settings": {
           "gain": {"type": "decimal", "value": "-1.25"}
@@ -144,13 +217,25 @@
             "": {"type": "integer", "value": "0"}
           }
         ]
+      },
+      {
+        "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f_<k';@\\;a`?;a\\IlN{zk1#a/{(;I3, R~QYEoF"},
+        "enabled": {"type": "bool", "value": "true"},
+        "settings": {
+          "gain": {"type": "decimal", "value": "-1.25"}
+        },
+        "children": [
+          {
+            "": {"type": "integer", "value": "1"}
+          }
+        ]
       }
     ]
   },
   "second.table": {},
   "versions": [
     {
-      "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007f*f#\\De,o1NRb(_ q *J&U"},
+      "label": {"type": "string", "value": "\"\\\u0008\u0009\u000a\u000c\u000d é Ελληνικά Հայերեն Україна 日本語 العربية é 😀 \u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u0009\u000a\u000b\u000c\u000d\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f\u007fTa$?}*SS'} hh"},
       "enabled": {"type": "bool", "value": "true"},
       "settings": {
         "gain": {"type": "decimal", "value": "-1.25"}

@@ -1,0 +1,11 @@
+[
+  {"path": [], "at": [1, 1], "source": 1},
+  {"path": ["limiter"], "key": [1, 2], "at": [1, 1], "source": 1},
+  {"path": ["limiter", "ceiling"], "key": [2, 1], "at": [2, 11], "source": 2},
+  {"path": ["limiter", "release"], "key": [3, 1], "at": [3, 11], "source": 1},
+  {"path": ["limiter", "detector"], "key": [4, 10], "at": [4, 1], "source": 1},
+  {"path": ["limiter", "detector", "mode"], "key": [4, 10], "at": [4, 17], "source": 2},
+  {"path": ["limiter", "lookahead"], "key": [3, 1], "at": [3, 13], "source": 2},
+  {"path": ["eq"], "key": [6, 2], "at": [6, 1], "source": 1},
+  {"path": ["eq", "low"], "key": [7, 1], "at": [7, 7], "source": 1}
+]

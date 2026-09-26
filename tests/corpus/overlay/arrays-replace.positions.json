@@ -1,0 +1,9 @@
+[
+  {"path": [], "at": [1, 1], "source": 1},
+  {"path": ["a"], "key": [1, 1], "at": [1, 5], "source": 2},
+  {"path": ["a", 0], "at": [1, 6], "source": 2},
+  {"path": ["rows"], "key": [2, 1], "at": [2, 8], "source": 2},
+  {"path": ["bands"], "key": [3, 3], "at": [3, 1], "source": 2},
+  {"path": ["bands", 0], "at": [3, 1], "source": 2},
+  {"path": ["bands", 0, "f"], "key": [4, 1], "at": [4, 5], "source": 2}
+]

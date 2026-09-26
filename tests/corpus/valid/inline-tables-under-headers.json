@@ -1,0 +1,22 @@
+{
+  "a": [
+    {
+      "b": {
+        "c": {"type": "integer", "value": "1"}
+      }
+    },
+    {
+      "b": [
+        {
+          "c": {"type": "integer", "value": "2"}
+        }
+      ]
+    }
+  ],
+  "t": {
+    "i": {
+      "j": {"type": "integer", "value": "6"}
+    },
+    "k": {"type": "integer", "value": "1"}
+  }
+}

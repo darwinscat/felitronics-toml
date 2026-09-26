@@ -1,0 +1,13 @@
+{
+  "limiter": {
+    "ceiling": {"type": "decimal", "value": "-2.0"},
+    "release": {"type": "decimal", "value": "0.050"},
+    "detector": {
+      "mode": {"type": "string", "value": "rms"}
+    },
+    "lookahead": {"type": "integer", "value": "5"}
+  },
+  "eq": {
+    "low": {"type": "decimal", "value": "0.0"}
+  }
+}

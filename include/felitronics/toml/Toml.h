@@ -92,9 +92,20 @@ static_assert (FLT_EVAL_METHOD == 0 || FLT_EVAL_METHOD == 1,
                "felitronics::toml needs double arithmetic evaluated as double: on 32-bit x86, build with SSE2 "
                "(-msse2 -mfpmath=sse; MSVC's default)");
 
+// Where something was written: a 1-based line and a 1-based column counted in code points, as in Error, and
+// the source number the caller passed to parse(), which tells documents apart once overlay() has merged them.
+// Line 0 means "not read from a document": a value the caller built. Positions never take part in equality.
+struct Position
+{
+    std::uint32_t line = 0;
+    std::uint32_t column = 0;
+    std::uint32_t source = 0;
+    bool operator== (const Position&) const = default;
+};
+
 struct Value;
 struct Entry;
-namespace detail { class Parser; }
+namespace detail { class Parser; struct Layers; }
 
 // Keys cannot be changed in place: that keeps the lookup index consistent with insertion order.
 // The sorted AVL index stores vector offsets, so lookup and insertion take O(log n) comparisons even for
@@ -111,16 +122,27 @@ public:
     [[nodiscard]] const std::vector<Entry>& entries() const noexcept;
     [[nodiscard]] const Value* find (std::string_view key) const noexcept;
     [[nodiscard]] Value* find (std::string_view key) noexcept;
-    [[nodiscard]] bool insert (std::string key, Value value);
+    // The whole entry: its key, its value and where the key was written. Null for a missing key.
+    [[nodiscard]] const Entry* entry (std::string_view key) const noexcept;
+    [[nodiscard]] bool insert (std::string key, Value value, Position keyPosition = {});
     // Value equality ignores mapping order, as TOML does. entries() retains order for schema presentation.
     [[nodiscard]] bool operator== (const Table& other) const;
+
+    // How write() spells the table where TOML leaves a choice: under a [header] of its own (the default), or inline
+    // as { ... } on its key's line. The parser marks the tables it read in braces; a caller may set either. A table
+    // inside an inline table is always inline, whatever its own style. Not part of equality.
+    enum class Style : std::uint8_t { Header, Inline };
+    Style style = Style::Header;
+    // Where the table was defined: its [header], the { of an inline table, or the key that implied it. The root
+    // of a parsed document is at 1:1. Not part of equality.
+    Position position {};
 
 private:
     struct Node { std::size_t left = 0, right = 0; int height = 1; };
     std::vector<Entry> entries_;
     std::vector<Node> index_;     // one-based links; zero is the empty subtree
     std::size_t root_ = 0;
-    enum class Origin { Implicit, Dotted, Header };
+    enum class Origin { Implicit, Dotted, Header, Inline };   // Inline: a value, closed to headers and dotted keys
     Origin origin_ = Origin::Implicit; // parser bookkeeping, excluded from value equality
     [[nodiscard]] int height (std::size_t n) const noexcept;
     void refresh (std::size_t n) noexcept;
@@ -128,6 +150,7 @@ private:
     [[nodiscard]] std::size_t link (std::size_t n, std::size_t added) noexcept;
     [[nodiscard]] std::size_t locate (std::string_view key) const noexcept;
     friend class detail::Parser;
+    friend struct detail::Layers;
 };
 
 using Array = std::vector<Value>;
@@ -136,6 +159,9 @@ struct Value
 {
     using Data = std::variant<std::string, std::int64_t, Decimal, bool, Array, Table, Tables>;
     Data data;
+    // Where the value starts in its document: the quote, the first digit or sign, the t or f, the [ of an array.
+    // A table value has its table's position. Line 0 for a value the caller built. Not part of equality.
+    Position position {};
     Value() : data (std::string{}) {}
     Value (std::string x) : data (std::move (x)) {}
     Value (const char* x) : data (std::string (x)) {}
@@ -143,22 +169,28 @@ struct Value
     Value (Decimal x) : data (x) {}
     Value (bool x) : data (x) {}
     Value (Array x) : data (std::move (x)) {}
-    Value (Table x) : data (std::move (x)) {}
+    Value (Table x) : data (std::move (x)), position (std::get_if<Table> (&data)->position) {}
     Value (Tables x) : data (std::move (x)) {}
-    bool operator== (const Value&) const = default;
+    bool operator== (const Value& other) const { return data == other.data; }
 };
-struct Entry { std::string key; Value value; };
+struct Entry
+{
+    std::string key;
+    Value value;
+    Position keyPosition {};   // where the key was first written: the first character of its bare or quoted spelling
+};
 inline Table::Table() = default;
 inline Table::~Table() = default;
 inline Table::Table (const Table&) = default;
 inline Table::Table (Table&& other) noexcept
-    : entries_ (std::move (other.entries_)), index_ (std::move (other.index_)),
+    : style (other.style), position (other.position), entries_ (std::move (other.entries_)), index_ (std::move (other.index_)),
       root_ (std::exchange (other.root_, 0)), origin_ (other.origin_) {}
 inline Table& Table::operator= (const Table&) = default;
 inline Table& Table::operator= (Table&& other) noexcept
 {
     if (this != &other)
     {
+        style = other.style; position = other.position;
         entries_ = std::move (other.entries_); index_ = std::move (other.index_);
         root_ = std::exchange (other.root_, 0); origin_ = other.origin_;
     }
@@ -223,10 +255,15 @@ inline Value* Table::find (std::string_view key) noexcept
     const auto n = locate (key);
     return n == 0 ? nullptr : &entries_[n - 1].value;
 }
-inline bool Table::insert (std::string key, Value value)
+inline const Entry* Table::entry (std::string_view key) const noexcept
+{
+    const auto n = locate (key);
+    return n == 0 ? nullptr : &entries_[n - 1];
+}
+inline bool Table::insert (std::string key, Value value, Position keyPosition)
 {
     if (locate (key) != 0) return false;
-    entries_.push_back ({ std::move (key), std::move (value) });
+    entries_.push_back ({ std::move (key), std::move (value), keyPosition });
     index_.push_back ({});
     root_ = link (root_, entries_.size());
     return true;
@@ -248,7 +285,8 @@ enum class Code
     ExpectedKey, KeyLimit, DepthLimit, ExpectedEquals, ExpectedValue, UnsupportedValue,
     UnterminatedString, StringLimit, InvalidEscape, InvalidUnicodeEscape, InvalidNumber, IntegerRange,
     DecimalScale, DecimalRange, ExpectedArraySeparator, UnterminatedArray, MixedArray, ArrayLimit,
-    ExpectedHeaderEnd, TrailingCharacters, DuplicateKey, RedefinedTable, TableValueConflict, EntryLimit
+    ExpectedHeaderEnd, TrailingCharacters, DuplicateKey, RedefinedTable, TableValueConflict, EntryLimit,
+    UnterminatedInlineTable, ExpectedInlineTableSeparator
 };
 struct Error
 {
@@ -278,6 +316,7 @@ using ParseResult = std::variant<Table, Error>;
         FELITRONICS_TOML_CODE(ExpectedHeaderEnd) FELITRONICS_TOML_CODE(TrailingCharacters)
         FELITRONICS_TOML_CODE(DuplicateKey) FELITRONICS_TOML_CODE(RedefinedTable)
         FELITRONICS_TOML_CODE(TableValueConflict) FELITRONICS_TOML_CODE(EntryLimit)
+        FELITRONICS_TOML_CODE(UnterminatedInlineTable) FELITRONICS_TOML_CODE(ExpectedInlineTableSeparator)
 #undef FELITRONICS_TOML_CODE
     }
     return "Unknown";
@@ -340,13 +379,14 @@ inline void appendUtf8 (std::string& s, std::uint32_t u)
 class Parser
 {
 public:
-    explicit Parser (std::string_view s) : text_ (s) {}
+    Parser (std::string_view s, std::uint32_t source) : text_ (s), source_ (source) {}
     [[nodiscard]] ParseResult run()
     {
         if (text_.size() > kMaxDocument) return errorAt (Code::DocumentLimit, kMaxDocument);
         scanEncoding();
         end_ = lexical_ ? lexical_->second : text_.size();
         Table root;
+        root.position = position (0);
         Table* current = &root;
         std::size_t currentDepth = 0;
         while (! failed_)
@@ -355,6 +395,7 @@ public:
             if (atEnd()) break;
             if (peek() == '[')
             {
+                const auto where = position (pos_);
                 ++pos_;
                 const bool array = peek() == '[';
                 if (array) ++pos_;
@@ -368,7 +409,7 @@ public:
                     ++pos_;
                 }
                 if (! lineEnd()) break;
-                current = header (root, path, array);
+                current = header (root, path, array, where);
                 currentDepth = path.size();
             }
             else
@@ -377,7 +418,7 @@ public:
                 if (failed_) break;
                 if (peek() != '=') { fail (Code::ExpectedEquals, pos_); break; }
                 ++pos_; spaces();
-                Value value = readValue();
+                Value value = readValue (currentDepth + path.size());
                 if (failed_ || ! lineEnd()) break;
                 assign (*current, path, std::move (value));
             }
@@ -389,12 +430,27 @@ public:
     }
 
 private:
-    struct Key { std::string name; std::size_t pos; };
+    struct Key { std::string name; std::size_t pos; Position position; };
     std::string_view text_;
+    std::uint32_t source_ = 0;
     std::size_t pos_ = 0, end_ = 0, entries_ = 0, failurePos_ = 0;
     Code failureCode_ = Code::ExpectedValue;
     bool failed_ = false;
     std::optional<std::pair<Code, std::size_t>> lexical_;
+    // The position of byte offset p, counted as errorAt counts it. The parser asks in increasing order, so a
+    // cursor that only moves forward makes every position of a document cost O(size) in total.
+    std::size_t cursor_ = 0;
+    std::uint32_t cursorLine_ = 1, cursorColumn_ = 1;
+    [[nodiscard]] Position position (std::size_t p) noexcept
+    {
+        if (p < cursor_) { cursor_ = 0; cursorLine_ = 1; cursorColumn_ = 1; }
+        for (; cursor_ < p; ++cursor_)
+        {
+            if (text_[cursor_] == '\n') { ++cursorLine_; cursorColumn_ = 1; }
+            else if ((static_cast<unsigned char> (text_[cursor_]) & 0xC0u) != 0x80u) ++cursorColumn_;
+        }
+        return { cursorLine_, cursorColumn_, source_ };
+    }
     [[nodiscard]] Error errorAt (Code code, std::size_t p) const noexcept { return detail::errorAt (code, text_, p); }
     void scanEncoding()
     {
@@ -435,19 +491,60 @@ private:
         if (atEnd() || peek() == '\n' || (peek() == '\r' && pos_ + 1 < text_.size() && text_[pos_ + 1] == '\n')) return true;
         fail (Code::TrailingCharacters, pos_); return false;
     }
+    [[nodiscard]] bool lineEndAt (std::size_t p) const noexcept
+    {
+        return p < end_ && (text_[p] == '\n' || (text_[p] == '\r' && p + 1 < end_ && text_[p + 1] == '\n'));
+    }
+    // A basic string, or with three quotes a multi-line basic string (never a key): a line ending right after the
+    // opening quotes is dropped, CRLF inside reads as LF, a backslash that ends a line drops every space, tab and
+    // line ending after it, and one or two quotes may stand right before the closing three.
     [[nodiscard]] std::string string (bool key)
     {
         std::string out;
-        ++pos_;
+        const std::size_t limit = key ? kMaxKey : kMaxString;
+        const bool multiline = ! key && text_.substr (pos_, 3) == "\"\"\"" && pos_ + 3 <= end_;
+        pos_ += multiline ? 3 : 1;
+        if (multiline && lineEndAt (pos_)) pos_ += text_[pos_] == '\r' ? 2u : 1u;
         while (! atEnd() && ! failed_)
         {
             const auto start = pos_;
             char c = text_[pos_++];
-            if (c == '"') return out;
-            if (c == '\n' || c == '\r') { fail (Code::UnterminatedString, start); break; }
-            if (c == '\\')
+            if (c == '"')
+            {
+                if (! multiline) return out;
+                std::size_t run = 1;
+                while (run < 5 && start + run < end_ && text_[start + run] == '"') ++run;
+                if (run >= 3)
+                {
+                    for (std::size_t q = 0; q + 3 < run && ! failed_; ++q)
+                    {
+                        out += '"';
+                        if (out.size() > limit) fail (Code::StringLimit, start + q);
+                    }
+                    pos_ = start + run;
+                    if (! failed_) return out;
+                    break;
+                }
+                out += '"';
+            }
+            else if (c == '\n' || c == '\r')
+            {
+                if (! multiline) { fail (Code::UnterminatedString, start); break; }
+                if (c == '\r') ++pos_;       // scanEncoding guarantees the LF
+                out += '\n';
+            }
+            else if (c == '\\')
             {
                 if (atEnd()) { fail (Code::UnterminatedString, pos_); break; }
+                if (multiline && (peek() == ' ' || peek() == '\t' || peek() == '\n' || peek() == '\r'))
+                {
+                    auto p = pos_;
+                    while (p < end_ && (text_[p] == ' ' || text_[p] == '\t')) ++p;
+                    if (! lineEndAt (p)) { fail (Code::InvalidEscape, pos_); break; }
+                    while (p < end_ && (text_[p] == ' ' || text_[p] == '\t' || lineEndAt (p))) p += text_[p] == '\r' ? 2u : 1u;
+                    pos_ = p;
+                    continue;
+                }
                 c = text_[pos_++];
                 switch (c)
                 {
@@ -486,17 +583,20 @@ private:
                 out.append (text_.substr (start, n));
                 pos_ = start + n;
             }
-            if (out.size() > (key ? kMaxKey : kMaxString)) fail (key ? Code::KeyLimit : Code::StringLimit, start);
+            if (out.size() > limit) fail (key ? Code::KeyLimit : Code::StringLimit, start);
         }
         if (! failed_) fail (Code::UnterminatedString, pos_);
         return out;
     }
-    [[nodiscard]] std::vector<Key> keys (std::size_t base)
+    // Inside an inline table (braced), EOF, a line ending or a comment where a key belongs is UnterminatedInlineTable.
+    [[nodiscard]] bool lineEnds() const noexcept { return atEnd() || peek() == '\n' || peek() == '\r' || peek() == '#'; }
+    [[nodiscard]] std::vector<Key> keys (std::size_t base, bool braced = false)
     {
         std::vector<Key> path;
         for (;;)
         {
             spaces();
+            if (braced && lineEnds()) { fail (Code::UnterminatedInlineTable, pos_); break; }
             if (base + path.size() == kMaxDepth) { fail (Code::DepthLimit, pos_); break; }
             const auto start = pos_;
             std::string name;
@@ -511,7 +611,7 @@ private:
                 if (name.empty()) fail (Code::ExpectedKey, pos_);
             }
             if (failed_) break;
-            path.push_back ({ std::move (name), start });
+            path.push_back ({ std::move (name), start, position (start) });
             spaces();
             if (peek() != '.') break;
             ++pos_;
@@ -522,12 +622,12 @@ private:
     {
         const auto start = pos_;
         if (peek() == '"') return string (false);
-        if (atEnd() || peek() == '#' || peek() == '\n' || peek() == '\r' || peek() == ',' || peek() == ']')
+        if (atEnd() || peek() == '#' || peek() == '\n' || peek() == '\r' || peek() == ',' || peek() == ']' || peek() == '}')
         { fail (Code::ExpectedValue, pos_); return {}; }
         if (! digit (peek()) && peek() != '+' && peek() != '-' && peek() != 't' && peek() != 'f')
         { fail (Code::UnsupportedValue, pos_); return {}; }
         while (! atEnd() && peek() != ' ' && peek() != '\t' && peek() != '\r' && peek() != '\n'
-               && peek() != ',' && peek() != ']' && peek() != '#') ++pos_;
+               && peek() != ',' && peek() != ']' && peek() != '}' && peek() != '#') ++pos_;
         if (lexical_ && pos_ == end_)
         { fail (lexical_->first, end_); return {}; }
         const auto token = text_.substr (start, pos_ - start);
@@ -536,30 +636,40 @@ private:
         std::size_t p = 0;
         const bool negative = token[p] == '-';
         if (token[p] == '-' || token[p] == '+') ++p;
-        const auto wholeStart = p;
-        while (p < token.size() && digit (token[p])) ++p;
-        if (p == wholeStart || (p - wholeStart > 1 && token[wholeStart] == '0'))
-        { fail (Code::InvalidNumber, start); return {}; }
-        const auto wholeEnd = p;
+        // Digits, each underscore between two of them (TOML's rule). The digits are collected without them.
+        std::string digits;
+        const auto run = [&] (bool fraction, std::uint8_t& scale)
+        {
+            for (const auto first = p; p < token.size() && (digit (token[p]) || token[p] == '_'); ++p)
+            {
+                if (token[p] == '_')
+                {
+                    if (p == first || ! digit (token[p - 1]) || p + 1 == token.size() || ! digit (token[p + 1])) return false;
+                    continue;
+                }
+                if (fraction && scale == 9) { fail (Code::DecimalScale, start + p); return false; }
+                if (fraction) ++scale;
+                digits += token[p];
+            }
+            return true;
+        };
         std::uint8_t scale = 0;
+        if (! run (false, scale) || digits.empty() || (digits.size() > 1 && digits[0] == '0'))
+        { fail (Code::InvalidNumber, start); return {}; }
         if (p < token.size() && token[p] == '.')
         {
             ++p;
-            while (p < token.size() && digit (token[p]))
-            {
-                if (scale == 9) { fail (Code::DecimalScale, start + p); return {}; }
-                ++scale; ++p;
-            }
-            if (scale == 0) { fail (Code::InvalidNumber, start); return {}; }
+            const bool fine = run (true, scale);
+            if (failed_) return {};
+            if (! fine || scale == 0) { fail (Code::InvalidNumber, start); return {}; }
         }
         if (p != token.size()) { fail (Code::InvalidNumber, start); return {}; }
         const std::uint64_t limit = scale != 0 ? std::uint64_t (Decimal::kMaxMantissa)
             : std::uint64_t (std::numeric_limits<std::int64_t>::max()) + (negative ? 1u : 0u);
         std::uint64_t n = 0;
-        for (std::size_t i = wholeStart; i < token.size(); ++i)
+        for (const char c : digits)
         {
-            if (i == wholeEnd && scale != 0) continue;
-            const auto d = std::uint64_t (token[i] - '0');
+            const auto d = std::uint64_t (c - '0');
             if (n > (limit - d) / 10)
             { fail (scale != 0 ? Code::DecimalRange : Code::IntegerRange, start); return {}; }
             n = n * 10 + d;
@@ -568,29 +678,92 @@ private:
         if (scale != 0) return Decimal { signedN, scale, negative && n == 0 };
         return signedN;
     }
-    [[nodiscard]] Value readValue()
+    // depth: how many key components lead from the root to this value's key. The keys of an inline table, and of
+    // each table in an array of them, continue from there.
+    [[nodiscard]] Value readValue (std::size_t depth)
     {
-        if (peek() != '[') return scalar();
+        const auto where = position (pos_);
+        if (peek() == '{') return inlineTable (depth, where);
+        if (peek() != '[')
+        {
+            Value v = scalar();
+            v.position = where;
+            return v;
+        }
         ++pos_; spaceLines();
-        Array a;
-        if (peek() == ']') { ++pos_; return a; }
+        // One type per array: every item the same scalar alternative, or every item an inline table.
+        Array items;
+        Tables tables;
+        if (peek() != ']')
+            for (;;)
+            {
+                if (atEnd()) { fail (Code::UnterminatedArray, pos_); break; }
+                if (items.size() + tables.size() == kMaxArray) { fail (Code::ArrayLimit, pos_); break; }
+                const auto start = pos_;
+                const auto itemWhere = position (start);
+                if (peek() == '{')
+                {
+                    Table t = inlineTable (depth, itemWhere);
+                    if (failed_) break;
+                    if (! items.empty()) { fail (Code::MixedArray, start); break; }
+                    if (! count (start)) break;      // each element counts once, as each [[header]] does
+                    tables.push_back (std::move (t));
+                }
+                else
+                {
+                    Value v = scalar();
+                    if (failed_) break;
+                    v.position = itemWhere;
+                    if (! tables.empty() || (! items.empty() && v.data.index() != items.front().data.index()))
+                    { fail (Code::MixedArray, start); break; }
+                    items.push_back (std::move (v));
+                }
+                spaceLines();
+                if (peek() == ']') break;
+                if (atEnd()) { fail (Code::UnterminatedArray, pos_); break; }
+                if (peek() != ',') { fail (Code::ExpectedArraySeparator, pos_); break; }
+                ++pos_; spaceLines();
+                if (peek() == ']') break;
+            }
+        if (! failed_) ++pos_;
+        Value result = tables.empty() ? Value (std::move (items)) : Value (std::move (tables));
+        result.position = where;
+        return result;
+    }
+    // { key = value, ... } on one line: no line ending or comment between the braces except inside a value (a
+    // multi-line string, an array), no trailing comma. It is a value: closed to later headers and dotted keys.
+    [[nodiscard]] Table inlineTable (std::size_t depth, Position where)
+    {
+        Table t;
+        t.origin_ = Table::Origin::Inline;
+        t.style = Table::Style::Inline;
+        t.position = where;
+        ++pos_; spaces();
+        if (peek() == '}') { ++pos_; return t; }
+        // Between the braces, EOF, a line ending or a comment anywhere outside a value (where a key, =, a value, a
+        // comma or the closing brace belongs) is UnterminatedInlineTable.
         for (;;)
         {
-            if (atEnd()) { fail (Code::UnterminatedArray, pos_); break; }
-            if (a.size() == kMaxArray) { fail (Code::ArrayLimit, pos_); break; }
-            const auto start = pos_;
-            Value v = scalar();
+            auto path = keys (depth, true);
             if (failed_) break;
-            if (! a.empty() && v.data.index() != a.front().data.index()) { fail (Code::MixedArray, start); break; }
-            a.push_back (std::move (v));
-            spaceLines();
-            if (peek() == ']') { ++pos_; break; }
-            if (atEnd()) { fail (Code::UnterminatedArray, pos_); break; }
-            if (peek() != ',') { fail (Code::ExpectedArraySeparator, pos_); break; }
-            ++pos_; spaceLines();
-            if (peek() == ']') { ++pos_; break; }
+            if (lineEnds()) { fail (Code::UnterminatedInlineTable, pos_); break; }
+            if (peek() != '=') { fail (Code::ExpectedEquals, pos_); break; }
+            ++pos_; spaces();
+            if (lineEnds()) { fail (Code::UnterminatedInlineTable, pos_); break; }
+            Value value = readValue (depth + path.size());
+            if (failed_) break;
+            assign (t, path, std::move (value));
+            if (failed_) break;
+            spaces();
+            if (peek() == '}') { ++pos_; break; }
+            if (peek() != ',')
+            {
+                fail (lineEnds() ? Code::UnterminatedInlineTable : Code::ExpectedInlineTableSeparator, pos_);
+                break;
+            }
+            ++pos_; spaces();
         }
-        return a;
+        return t;
     }
     [[nodiscard]] bool count (std::size_t p)
     {
@@ -600,7 +773,7 @@ private:
     [[nodiscard]] Value* add (Table& t, const Key& k, Value v)
     {
         if (! count (k.pos)) return nullptr;
-        if (! t.insert (k.name, std::move (v))) { fail (Code::DuplicateKey, k.pos); return nullptr; }
+        if (! t.insert (k.name, std::move (v), k.position)) { fail (Code::DuplicateKey, k.pos); return nullptr; }
         return t.find (k.name);
     }
     [[nodiscard]] Table* descend (Table& t, const Key& k, bool dotted)
@@ -608,20 +781,24 @@ private:
         auto* v = t.find (k.name);
         if (v == nullptr)
         {
+            // An implicit or dotted table is where its key first names it, until a header defines it.
             Table child;
             child.origin_ = dotted ? Table::Origin::Dotted : Table::Origin::Implicit;
+            child.position = k.position;
             v = add (t, k, std::move (child));
             if (v == nullptr) return nullptr;
         }
         if (auto* child = std::get_if<Table> (&v->data))
         {
+            if (child->origin_ == Table::Origin::Inline) { fail (Code::TableValueConflict, k.pos); return nullptr; }
             if (dotted && child->origin_ == Table::Origin::Header)
             { fail (Code::RedefinedTable, k.pos); return nullptr; }
             if (dotted) child->origin_ = Table::Origin::Dotted;
             return child;
         }
         if (! dotted)
-            if (auto* a = std::get_if<Tables> (&v->data); a != nullptr && ! a->empty()) return &a->back();
+            if (auto* a = std::get_if<Tables> (&v->data); a != nullptr && ! a->empty() && a->back().origin_ != Table::Origin::Inline)
+                return &a->back();
         fail (Code::TableValueConflict, k.pos); return nullptr;
     }
     void assign (Table& t, const std::vector<Key>& path, Value v)
@@ -635,11 +812,17 @@ private:
         const auto& key = path.back();
         if (const auto* old = parent->find (key.name))
         {
-            fail (old->data.index() >= 5 ? Code::TableValueConflict : Code::DuplicateKey, key.pos); return;
+            // A key assigned before is a duplicate, inline tables included. A table that headers or dotted keys
+            // built cannot become a value: that is a conflict of roles.
+            const auto* table = std::get_if<Table> (&old->data);
+            const auto* tables = std::get_if<Tables> (&old->data);
+            const bool built = (table != nullptr && table->origin_ != Table::Origin::Inline)
+                            || (tables != nullptr && ! tables->empty() && tables->back().origin_ != Table::Origin::Inline);
+            fail (built ? Code::TableValueConflict : Code::DuplicateKey, key.pos); return;
         }
         (void) add (*parent, key, std::move (v));
     }
-    [[nodiscard]] Table* header (Table& root, const std::vector<Key>& path, bool array)
+    [[nodiscard]] Table* header (Table& root, const std::vector<Key>& path, bool array, Position where)
     {
         Table* parent = &root;
         for (std::size_t i = 0; i + 1 < path.size(); ++i)
@@ -651,14 +834,20 @@ private:
         auto* v = parent->find (key.name);
         if (array)
         {
-            if (v == nullptr) v = add (*parent, key, Tables{});
+            if (v == nullptr)
+            {
+                Value container { Tables{} };
+                container.position = where;     // the array of tables is where its first [[header]] is
+                v = add (*parent, key, std::move (container));
+            }
             if (v == nullptr) return nullptr;
-            if (auto* a = std::get_if<Tables> (&v->data))
+            if (auto* a = std::get_if<Tables> (&v->data); a != nullptr && (a->empty() || a->back().origin_ != Table::Origin::Inline))
             {
                 if (a->size() == kMaxArray) { fail (Code::ArrayLimit, key.pos); return nullptr; }
                 if (! count (key.pos)) return nullptr;
                 a->emplace_back();
                 a->back().origin_ = Table::Origin::Header;
+                a->back().position = where;
                 return &a->back();
             }
         }
@@ -668,8 +857,10 @@ private:
             if (v == nullptr) return nullptr;
             if (auto* child = std::get_if<Table> (&v->data))
             {
+                if (child->origin_ == Table::Origin::Inline) { fail (Code::TableValueConflict, key.pos); return nullptr; }
                 if (child->origin_ != Table::Origin::Implicit) { fail (Code::RedefinedTable, key.pos); return nullptr; }
                 child->origin_ = Table::Origin::Header;
+                child->position = v->position = where;
                 return child;
             }
         }
@@ -699,33 +890,48 @@ inline void unsignedText (std::string& out, std::uint64_t n)
     }
     return true;
 }
+// One byte of a basic string's content, escaped where it must be.
+inline void escaped (std::string& out, char c)
+{
+    switch (c)
+    {
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\b': out += "\\b"; break;
+        case '\n': out += "\\n"; break;
+        case '\f': out += "\\f"; break;
+        case '\r': out += "\\r"; break;
+        default:
+        {
+            const auto u = static_cast<unsigned char> (c);
+            if ((u < 0x20 && u != '\t') || u == 0x7F)
+            {
+                out += "\\u00";
+                out += "0123456789ABCDEF"[u >> 4]; out += "0123456789ABCDEF"[u & 15u];
+            }
+            else out += c;
+            break;
+        }
+    }
+}
 inline void quoted (std::string& out, std::string_view s)
 {
     out += '"';
-    for (const char c : s)
-    {
-        switch (c)
-        {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\b': out += "\\b"; break;
-            case '\n': out += "\\n"; break;
-            case '\f': out += "\\f"; break;
-            case '\r': out += "\\r"; break;
-            default:
-            {
-                const auto u = static_cast<unsigned char> (c);
-                if ((u < 0x20 && u != '\t') || u == 0x7F)
-                {
-                    out += "\\u00";
-                    out += "0123456789ABCDEF"[u >> 4]; out += "0123456789ABCDEF"[u & 15u];
-                }
-                else out += c;
-                break;
-            }
-        }
-    }
+    for (const char c : s) escaped (out, c);
     out += '"';
+}
+// The multi-line spelling: the opening quotes on the key's line, the text from the next line on, a raw LF for
+// each line feed. A quote stays raw unless another quote or the closing delimiter follows it, so no run of
+// quotes can close the string early. Everything else is escaped as in a one-line string.
+inline void multilineQuoted (std::string& out, std::string_view s)
+{
+    out += "\"\"\"\n";
+    for (std::size_t i = 0; i < s.size(); ++i)
+    {
+        if (s[i] == '\n' || (s[i] == '"' && i + 1 < s.size() && s[i + 1] != '"')) out += s[i];
+        else escaped (out, s[i]);
+    }
+    out += "\"\"\"";
 }
 inline void keyText (std::string& out, std::string_view key)
 {
@@ -748,12 +954,13 @@ private:
     bool failed_ = false;
     void bound() { if (out_.size() > kMaxDocument) failed_ = true; }
     void count() { if (++entries_ > kMaxEntries) failed_ = true; }
-    void scalar (const Value& value)
+    void scalar (const Value& value, bool statement)
     {
         if (const auto* s = std::get_if<std::string> (&value.data))
         {
             if (! validString (*s, kMaxString)) { failed_ = true; return; }
-            quoted (out_, *s);
+            if (statement && s->find ('\n') != std::string::npos) multilineQuoted (out_, *s);
+            else quoted (out_, *s);
         }
         else if (const auto* n = std::get_if<std::int64_t> (&value.data))
         {
@@ -778,7 +985,22 @@ private:
         else failed_ = true;
         bound();
     }
-    void value (const Value& v)
+    [[nodiscard]] static bool inlineElements (const Tables& a) noexcept
+    {
+        return ! a.empty() && std::all_of (a.begin(), a.end(), [] (const Table& t) { return t.style == Table::Style::Inline; });
+    }
+    // Spelled on its key's line: a scalar, a scalar array, an inline table, or an array whose tables are all inline.
+    [[nodiscard]] static bool statement (const Value& v) noexcept
+    {
+        if (const auto* t = std::get_if<Table> (&v.data)) return t->style == Table::Style::Inline;
+        if (const auto* a = std::get_if<Tables> (&v.data)) return inlineElements (*a);
+        return true;
+    }
+    // depth: how many key components lead from the root to the value's key. statement: the value is the whole
+    // right-hand side of a key = value line, where a string with a line feed is spelled on several lines and an
+    // array of inline tables puts one table on each line. Inside an array or an inline table, everything stays on
+    // one line.
+    void value (const Value& v, std::size_t depth, bool statement)
     {
         if (const auto* a = std::get_if<Array> (&v.data))
         {
@@ -788,11 +1010,44 @@ private:
             {
                 if ((*a)[i].data.index() != a->front().data.index()) { failed_ = true; return; }
                 if (i != 0) out_ += ", ";
-                scalar ((*a)[i]);
+                scalar ((*a)[i], false);
             }
             out_ += ']';
         }
-        else scalar (v);
+        else if (const auto* t = std::get_if<Table> (&v.data)) inlineTable (*t, depth);
+        else if (const auto* ts = std::get_if<Tables> (&v.data))
+        {
+            if (ts->empty() || ts->size() > kMaxArray) { failed_ = true; return; }
+            out_ += statement ? "[\n" : "[";
+            for (std::size_t i = 0; i < ts->size() && ! failed_; ++i)
+            {
+                count();
+                if (statement) out_ += "    ";
+                else if (i != 0) out_ += ", ";
+                inlineTable ((*ts)[i], depth);
+                if (statement) out_ += ",\n";
+                bound();
+            }
+            out_ += ']';
+        }
+        else scalar (v, statement);
+    }
+    // { key = value, ... } in entry order, whatever the style of the tables inside it. depth: the table's own.
+    void inlineTable (const Table& t, std::size_t depth)
+    {
+        if (depth > kMaxDepth) { failed_ = true; return; }
+        if (t.entries().empty()) { out_ += "{}"; return; }
+        out_ += "{ ";
+        for (std::size_t i = 0; i < t.entries().size() && ! failed_; ++i)
+        {
+            const auto& e = t.entries()[i];
+            count();
+            if (depth == kMaxDepth || ! validString (e.key, kMaxKey)) { failed_ = true; return; }
+            if (i != 0) out_ += ", ";
+            keyText (out_, e.key); out_ += " = "; value (e.value, depth + 1, false);
+            bound();
+        }
+        out_ += " }";
     }
     void heading (const std::string& path, bool array)
     {
@@ -811,9 +1066,9 @@ private:
             count();
             if (depth == kMaxDepth || ! validString (e.key, kMaxKey)) failed_ = true;
             if (failed_) return;
-            if (e.value.data.index() < 5)
+            if (statement (e.value))
             {
-                keyText (out_, e.key); out_ += " = "; value (e.value); out_ += '\n'; bound();
+                keyText (out_, e.key); out_ += " = "; value (e.value, depth + 1, true); out_ += '\n'; bound();
                 if (failed_) return;
             }
         }
@@ -822,6 +1077,7 @@ private:
             for (const auto& e : t.entries())
             {
                 if (failed_) return;
+                if (statement (e.value)) continue;
                 const auto* child = std::get_if<Table> (&e.value.data);
                 const auto* array = std::get_if<Tables> (&e.value.data);
                 if ((group == 0 && child == nullptr) || (group == 1 && array == nullptr)) continue;
@@ -845,6 +1101,50 @@ private:
 };
 } // namespace detail
 
+namespace detail
+{
+// Walks the two trees with a stack of its own. A table's entries are all replaced or appended before any of its
+// children is visited, so the child pointers taken afterwards stay valid: nothing inserts into that vector again.
+struct Layers
+{
+    static void merge (Table& into, const Table& top)
+    {
+        std::vector<std::pair<Table*, const Table*>> work { { &into, &top } };
+        std::vector<std::pair<std::size_t, const Table*>> nested;
+        while (! work.empty())
+        {
+            auto [dst, src] = work.back();
+            work.pop_back();
+            nested.clear();
+            for (const auto& e : src->entries())
+            {
+                const auto n = dst->locate (e.key);
+                if (n == 0) { (void) dst->insert (e.key, e.value, e.keyPosition); continue; }
+                auto& old = dst->entries_[n - 1];
+                const auto* child = std::get_if<Table> (&e.value.data);
+                if (child != nullptr && std::holds_alternative<Table> (old.value.data)) nested.emplace_back (n - 1, child);
+                else { old.value = e.value; old.keyPosition = e.keyPosition; }
+            }
+            for (const auto& [i, child] : nested) work.emplace_back (std::get_if<Table> (&dst->entries_[i].value.data), child);
+        }
+    }
+};
+}
+
+// The tree base becomes with top laid over it. Where both hold a table at a key, the two merge key by key, at every
+// depth. Anywhere else top's value replaces base's whole: a scalar, an array, an array of tables, and a table that
+// meets anything but a table. Keys only in base stay; keys only in top are appended, in top's order. A merged table
+// keeps base's place, style and position; a replaced entry takes top's key position with top's value. Every value
+// keeps its own position, so position.source tells which layer it came from when each document was parsed with its
+// own source number. Layers apply in order: overlay(overlay(defaults, user), project). It never fails; the result
+// may exceed the document limits, which writeChecked() then refuses.
+[[nodiscard]] inline Table overlay (const Table& base, const Table& top)
+{
+    Table out = base;
+    detail::Layers::merge (out, top);
+    return out;
+}
+
 // Invalid caller-built trees return nullopt: mixed/nested arrays, empty Tables (use Array{} for []), invalid
 // UTF-8/decimals or any exceeded limit. An empty root is valid and produces the empty string.
 [[nodiscard]] inline std::optional<std::string> writeChecked (const Table& root)
@@ -857,9 +1157,10 @@ private:
     auto out = writeChecked (root);
     return out ? std::move (*out) : std::string{};
 }
-[[nodiscard]] inline ParseResult parse (std::string_view text) noexcept
+// source is copied into every Position of the tree, so values from different documents stay apart after overlay().
+[[nodiscard]] inline ParseResult parse (std::string_view text, std::uint32_t source = 0) noexcept
 {
-    auto result = detail::Parser (text).run();
+    auto result = detail::Parser (text, source).run();
     if (const auto* root = std::get_if<Table> (&result); root != nullptr && ! writeChecked (*root))
     {
         // Canonical spacing/escapes can grow a compact input. Refuse it here so EVERY successful parse can

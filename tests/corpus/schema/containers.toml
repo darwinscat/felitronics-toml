@@ -1,0 +1,9 @@
+name = "x"
+ceiling = 0.0
+limiter = 5
+bands = { f = 1 }
+freqs = 5
+rows = [1, 2]
+none = []
+["a b"."c.d"]
+x = 1

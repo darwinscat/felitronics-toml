@@ -1,0 +1,7 @@
+name = "x"
+ceiling = 0
+limiter = { release = 1 }
+bands = [
+  { f = 20, gain = -24 },
+  { f = 20000, gain = 24.000000000 },
+]

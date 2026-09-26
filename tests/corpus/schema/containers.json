@@ -1,0 +1,38 @@
+{
+  "unknownKeys": "error",
+  "fields": [
+    {"key": "name", "type": "string"},
+    {"key": "ceiling", "type": "decimal"},
+    {"key": "limiter", "type": "table", "fields": []},
+    {"key": "bands", "type": "tables", "fields": [
+      {"key": "f", "type": "integer", "min": "20", "max": "20000"},
+      {"key": "gain", "type": "decimal", "min": "-24.0", "max": "24.0"},
+      {"key": "type", "type": "string", "optional": true}
+    ]},
+    {"key": "freqs", "type": "array", "of": "integer"},
+    {"key": "rows", "type": "tables", "fields": []},
+    {"key": "none", "type": "tables", "fields": [
+      {"key": "f", "type": "integer", "min": "20", "max": "20000"},
+      {"key": "gain", "type": "decimal", "min": "-24.0", "max": "24.0"},
+      {"key": "type", "type": "string", "optional": true}
+    ]},
+    {"key": "a b", "type": "table", "fields": [
+      {"key": "c.d", "type": "table", "fields": []}
+    ]}
+  ],
+  "read": {
+    "name": {"type": "string", "value": "x"},
+    "ceiling": {"type": "decimal", "value": "0.0"},
+    "none": [],
+    "a b": {
+      "c.d": {}
+    }
+  },
+  "problems": [
+    {"fault": "WrongType", "severity": "error", "path": "limiter", "line": 3, "column": 11},
+    {"fault": "WrongType", "severity": "error", "path": "bands", "line": 4, "column": 9},
+    {"fault": "WrongType", "severity": "error", "path": "freqs", "line": 5, "column": 9},
+    {"fault": "WrongType", "severity": "error", "path": "rows", "line": 6, "column": 8},
+    {"fault": "UnknownKey", "severity": "error", "path": "\"a b\".\"c.d\".x", "line": 9, "column": 1}
+  ]
+}

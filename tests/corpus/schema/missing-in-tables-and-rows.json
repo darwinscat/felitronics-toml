@@ -1,0 +1,45 @@
+{
+  "unknownKeys": "error",
+  "fields": [
+    {"key": "limiter", "type": "table", "fields": [
+      {"key": "release", "type": "decimal"}
+    ]},
+    {"key": "bands", "type": "tables", "fields": [
+      {"key": "f", "type": "integer", "min": "20", "max": "20000"},
+      {"key": "gain", "type": "decimal", "min": "-24.0", "max": "24.0"},
+      {"key": "type", "type": "string", "optional": true}
+    ]},
+    {"key": "Київ", "type": "table", "fields": [
+      {"key": "sub", "type": "table", "fields": [
+        {"key": "x", "type": "integer"}
+      ]},
+      {"key": "y", "type": "bool"}
+    ]},
+    {"key": "absent", "type": "table", "fields": []},
+    {"key": "rows", "type": "tables", "fields": []}
+  ],
+  "read": {
+    "limiter": {},
+    "bands": [
+      {
+        "gain": {"type": "decimal", "value": "1.0"}
+      },
+      {
+        "f": {"type": "integer", "value": "100"}
+      }
+    ],
+    "Київ": {
+      "sub": {}
+    }
+  },
+  "problems": [
+    {"fault": "Missing", "severity": "error", "path": "limiter.release", "line": 1, "column": 1},
+    {"fault": "UnknownKey", "severity": "error", "path": "limiter.lookahead", "line": 2, "column": 1},
+    {"fault": "Missing", "severity": "error", "path": "bands[0].f", "line": 3, "column": 1},
+    {"fault": "Missing", "severity": "error", "path": "bands[1].gain", "line": 5, "column": 1},
+    {"fault": "Missing", "severity": "error", "path": "\"Київ\".sub.x", "line": 7, "column": 1},
+    {"fault": "Missing", "severity": "error", "path": "\"Київ\".y", "line": 7, "column": 2},
+    {"fault": "Missing", "severity": "error", "path": "absent", "line": 1, "column": 1},
+    {"fault": "Missing", "severity": "error", "path": "rows", "line": 1, "column": 1}
+  ]
+}

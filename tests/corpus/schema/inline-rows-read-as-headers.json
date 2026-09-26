@@ -1,0 +1,41 @@
+{
+  "unknownKeys": "error",
+  "fields": [
+    {"key": "name", "type": "string"},
+    {"key": "ceiling", "type": "decimal", "min": "-12.0", "max": "0.0"},
+    {"key": "rate", "type": "integer", "optional": true, "min": "8000", "max": "192000"},
+    {"key": "dither", "type": "bool", "optional": true},
+    {"key": "freqs", "type": "array", "of": "integer", "optional": true, "min": "20", "max": "20000"},
+    {"key": "steps", "type": "array", "of": "decimal", "optional": true},
+    {"key": "labels", "type": "array", "of": "string", "optional": true},
+    {"key": "flags", "type": "array", "of": "bool", "optional": true},
+    {"key": "limiter", "type": "table", "fields": [
+      {"key": "release", "type": "decimal", "min": "0.001", "max": "1.0"},
+      {"key": "lookahead", "type": "integer", "optional": true, "min": "0", "max": "50"}
+    ]},
+    {"key": "bands", "type": "tables", "optional": true, "fields": [
+      {"key": "f", "type": "integer", "min": "20", "max": "20000"},
+      {"key": "gain", "type": "decimal", "min": "-24.0", "max": "24.0"},
+      {"key": "type", "type": "string", "optional": true}
+    ]},
+    {"key": "mode", "type": "string", "optional": true}
+  ],
+  "read": {
+    "name": {"type": "string", "value": "x"},
+    "ceiling": {"type": "decimal", "value": "0.0"},
+    "limiter": {
+      "release": {"type": "decimal", "value": "1.0"}
+    },
+    "bands": [
+      {
+        "f": {"type": "integer", "value": "20"},
+        "gain": {"type": "decimal", "value": "-24.0"}
+      },
+      {
+        "f": {"type": "integer", "value": "20000"},
+        "gain": {"type": "decimal", "value": "24.000000000"}
+      }
+    ]
+  },
+  "problems": []
+}

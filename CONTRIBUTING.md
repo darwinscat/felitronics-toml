@@ -7,7 +7,8 @@ should exist, a clearer sentence in the docs.
 ## What a pull request needs
 
 - **Every CI row green.** gcc, clang, Apple clang, MSVC, the sanitizer row, wasm, the `tomllib`
-  cross-check and the fuzzer. A change that is right on four platforms and wrong on the fifth is wrong.
+  cross-check, the fuzzer and the package rows. A change that is right on four platforms and wrong on the fifth
+  is wrong.
 - **A test for any change in behaviour.** A new rule or a fixed bug comes with the case that shows it:
   in `tests/` for C++-specific behaviour, and in the conformance corpus (below) for anything a document
   can show.
@@ -21,7 +22,7 @@ lands on `main` unless the maintainer merges it.
 
 The point of this library is that its grammar is small enough to specify completely, test completely,
 and implement identically in another language. Features that widen the grammar (another string form,
-exponents, dates, inline tables, a higher limit) need a discussion in an issue first, before any code.
+exponents, dates, literal strings, a higher limit) need a discussion in an issue first, before any code.
 The answer may well be no, and that is not a judgement of the idea: every addition is something every
 port has to match forever.
 
@@ -31,8 +32,9 @@ port has to match forever.
 their expected trees and canonical text, and refused documents with their exact error code and position.
 Implementations in other languages prove they match by running it.
 
-- A new case is a new pair of files (`<name>.toml` + `<name>.json`, and `<name>.canonical.toml` when the
-  document is not already canonical). Name it after what it shows.
+- A new case is a new set of files (`<name>.toml` + `<name>.json`, and `<name>.canonical.toml` when the
+  document is not already canonical; `overlay/` and `schema/` cases have their own set, see the corpus README).
+  Name it after what it shows.
 - Changing an existing expectation changes the subset for every implementation. Say so in the pull
   request and in `CHANGELOG.md`.
 - The expected tree must also read correctly in Python's `tomllib`

@@ -46,7 +46,8 @@ int main (int argc, char** argv)
     fixtures::put (root, "array", Tables { Table{} });
     fixtures::put (root, "a", Decimal { 0, 2, true });
     fixtures::put (root, "", "é\n\\\"");
-    test::ok (write (root) == "b = 1\na = -0.00\n\"\" = \"é\\n\\\\\\\"\"\n\n[table]\nz = false\n\n[[array]]\n", "canonical bytes");
+    // The string holds a line feed, so it is written on several lines; its last quote is escaped.
+    test::ok (write (root) == "b = 1\na = -0.00\n\"\" = \"\"\"\né\n\\\\\\\"\"\"\"\n\n[table]\nz = false\n\n[[array]]\n", "canonical bytes");
     test::ok (root.entries()[0].key == "table" && root.entries()[1].key == "b", "caller insertion order remains intact");
     test::ok (! root.insert ("b", true), "public insertion refuses duplicates");
     Table copy = root;

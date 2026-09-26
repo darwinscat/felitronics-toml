@@ -1,0 +1,23 @@
+{
+  "unknownKeys": "error",
+  "fields": [
+    {"key": "a", "type": "decimal"},
+    {"key": "b", "type": "decimal"},
+    {"key": "c", "type": "decimal"},
+    {"key": "d", "type": "decimal"},
+    {"key": "e", "type": "decimal"},
+    {"key": "f", "type": "array", "of": "decimal"},
+    {"key": "g", "type": "integer"}
+  ],
+  "read": {
+    "a": {"type": "decimal", "value": "5.0"},
+    "b": {"type": "decimal", "value": "-900719925474099.0"},
+    "d": {"type": "decimal", "value": "0.0"},
+    "e": {"type": "decimal", "value": "0.0"},
+    "f": [{"type": "decimal", "value": "1.0"}, {"type": "decimal", "value": "-2.0"}]
+  },
+  "problems": [
+    {"fault": "OutOfRange", "severity": "error", "path": "c", "line": 3, "column": 5},
+    {"fault": "WrongType", "severity": "error", "path": "g", "line": 7, "column": 5}
+  ]
+}

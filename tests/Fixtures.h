@@ -30,6 +30,10 @@ inline std::string decimalInteger (std::uint64_t n)
 inline const std::string ukraina = "\u0423\u043A\u0440\u0430\u0457\u043D\u0430";   // "Ukraina": 7 code points, 14 bytes
 inline const std::string klyuch = "\u043A\u043B\u044E\u0447";                       // "klyuch" (key)
 inline const std::string kyiv = "\u041A\u0438\u0457\u0432";                         // "Kyiv"
+// More scripts for the corpus generator, kept here so tools/ stays ASCII: CJK, Arabic (right to left), a 4-byte emoji.
+inline const std::string nihongo = "日本語";
+inline const std::string arabiyya = "العربية";
+inline const std::string smile = "😀";
 
 // Latin-1, Greek, Armenian, Cyrillic, CJK, Arabic (right to left), a combining acute, 4-byte emoji, every control.
 inline std::string specialString (Generator& g)
@@ -63,6 +67,32 @@ inline Table generated (Generator& g, unsigned depth = 0)
         }
         put (t, "versions", std::move (a));
         put (t, "second.table", Table{});
+        // An inline table, and inside it a table and an array of tables that are inline because it is.
+        Table row;
+        put (row, "gain", Decimal { -125, 2 });
+        put (row, "name", specialString (g));
+        Table inner;
+        put (inner, "on", true);
+        put (row, "inner", std::move (inner));
+        Tables cells (2);
+        put (cells[0], "n", std::int64_t (1));
+        put (cells[1], "", "second");
+        put (row, "cells", std::move (cells));
+        put (row, "list", Array { Value (std::int64_t (3)), Value (std::int64_t (-4)) });
+        row.style = Table::Style::Inline;
+        put (t, "inline", std::move (row));
+        // An array of inline tables: one row per line.
+        Tables rows;
+        for (unsigned i = 0, n = 1 + unsigned (g.next() % 3); i < n; ++i)
+        {
+            Table r;
+            put (r, "index", std::int64_t (i));
+            put (r, "text", specialString (g));
+            r.style = Table::Style::Inline;
+            rows.push_back (std::move (r));
+        }
+        put (t, "rows", std::move (rows));
+        put (t, "empty inline", [] { Table e; e.style = Table::Style::Inline; return e; }());
     }
     put (t, "", specialString (g));
     put (t, "key\n\"\\é\t", "plain");
@@ -132,6 +162,59 @@ inline std::vector<std::pair<const char*, std::string>> unicodeDocuments()
         { "limit-quoted-key-four-byte-character", "\"" + std::string (kMaxKey - 4, 'a') + "😀\"=0" },
         { "limit-string-two-byte-character", "a=\"" + std::string (kMaxString - 2, 'x') + "é\"" } };
 }
+// Every position in a tree, depth first in entry order: the root, then each entry (its key and its value), each
+// array item and each array-of-tables element. The path is a JSON array of keys and item indexes.
+struct Located { std::string path; bool keyed; Position key, at; };
+inline std::string jsonString (std::string_view s);
+inline void locate (std::vector<Located>& out, const Table& table, const std::string& path)
+{
+    const auto join = [] (const std::string& p, const std::string& component)
+    { return p.size() == 2 ? "[" + component + "]" : p.substr (0, p.size() - 1) + ", " + component + "]"; };
+    for (const auto& e : table.entries())
+    {
+        const auto at = join (path, jsonString (e.key));
+        out.push_back ({ at, true, e.keyPosition, e.value.position });
+        if (const auto* a = std::get_if<Array> (&e.value.data))
+            for (std::size_t i = 0; i < a->size(); ++i) out.push_back ({ join (at, decimalInteger (i)), false, {}, (*a)[i].position });
+        else if (const auto* t = std::get_if<Table> (&e.value.data)) locate (out, *t, at);
+        else if (const auto* ts = std::get_if<Tables> (&e.value.data))
+            for (std::size_t i = 0; i < ts->size(); ++i)
+            {
+                const auto element = join (at, decimalInteger (i));
+                out.push_back ({ element, false, {}, (*ts)[i].position });
+                locate (out, (*ts)[i], element);
+            }
+    }
+}
+inline std::vector<Located> locate (const Table& root)
+{
+    std::vector<Located> out { { "[]", false, {}, root.position } };
+    locate (out, root, "[]");
+    return out;
+}
+// sources: add each value's source number, which its key shares (for trees that overlay() merged).
+inline std::string positionsJson (const Table& root, bool sources = false)
+{
+    const auto pair = [] (Position p) { return "[" + decimalInteger (p.line) + ", " + decimalInteger (p.column) + "]"; };
+    std::string out = "[\n";
+    const auto all = locate (root);
+    for (std::size_t i = 0; i < all.size(); ++i)
+        out += "  {\"path\": " + all[i].path + (all[i].keyed ? ", \"key\": " + pair (all[i].key) : "") + ", \"at\": "
+             + pair (all[i].at) + (sources ? ", \"source\": " + decimalInteger (all[i].at.source) : "")
+             + (i + 1 == all.size() ? "}\n" : "},\n");
+    return out + "]\n";
+}
+// The byte offset of a position, found without the parser: count lines, then code points within the line.
+inline std::size_t offsetOf (std::string_view text, Position p)
+{
+    std::size_t i = 0;
+    for (std::uint32_t line = 1; line < p.line && i < text.size(); ++i)
+        if (text[i] == '\n') ++line;
+    for (std::uint32_t column = 1; i < text.size(); ++i)
+        if ((static_cast<unsigned char> (text[i]) & 0xC0u) != 0x80u && column++ == p.column) break;
+    return i;
+}
+
 // This serializer is test-only and independently spells JSON. Decimal expectations carry exact binary64
 // bits, so Python checks negative zero and rounding as well as TOML type, tree shape and string contents.
 inline std::string jsonString (std::string_view s)

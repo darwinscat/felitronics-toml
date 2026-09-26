@@ -8,6 +8,8 @@
 //   invalid/<name>.toml  is refused with exactly the code, line and column in <name>.json.
 #include <felitronics/toml/Toml.h>
 #include "toml_test.h"
+#include "Fixtures.h"
+#include "SchemaCases.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -302,7 +304,12 @@ std::string treeDiffers (const ParseResult& result, const Json& expected)
     return tableDiffers (*std::get_if<Table> (&result), expected, "root");
 }
 
-// The stems of <dir>/*.toml, without the .canonical.toml companions, sorted for a stable report.
+bool endsWith (std::string_view s, std::string_view tail)
+{
+    return s.size() >= tail.size() && s.substr (s.size() - tail.size()) == tail;
+}
+// The stems of <dir>/*.toml, without the .canonical.toml companions, sorted for a stable report. jsonFiles counts
+// the <stem>.json files, not the .positions.json companions.
 std::vector<std::string> documents (const fs::path& dir, std::size_t& jsonFiles)
 {
     std::vector<std::string> names;
@@ -313,13 +320,116 @@ std::vector<std::string> documents (const fs::path& dir, std::size_t& jsonFiles)
         const auto dot = file.rfind ('.');
         if (dot == std::string::npos) continue;
         const auto stem = file.substr (0, dot), extension = file.substr (dot);
-        if (extension == ".json") ++jsonFiles;
-        const std::string_view companion = ".canonical";
-        if (extension == ".toml" && ! (stem.size() >= companion.size() && stem.compare (stem.size() - companion.size(), companion.size(), companion) == 0))
-            names.push_back (stem);
+        if (extension == ".json" && ! endsWith (stem, ".positions")) ++jsonFiles;
+        if (extension == ".toml" && ! endsWith (stem, ".canonical")) names.push_back (stem);
     }
     std::sort (names.begin(), names.end());
     return names;
+}
+// The fields of a schema case, read back into the structures tools/make_corpus.cpp wrote them from.
+std::optional<std::vector<schema_cases::Field>> fields (const Json& j)
+{
+    if (j.kind != Json::Kind::Array) return std::nullopt;
+    std::vector<schema_cases::Field> out;
+    for (const auto& item : j.items)
+    {
+        schema_cases::Field f;
+        const auto text = [&] (const char* name, std::string& into, bool required)
+        {
+            const auto* m = item.member (name);
+            if (m == nullptr) return ! required;
+            if (m->kind != Json::Kind::String) return false;
+            into = m->text;
+            return true;
+        };
+        const auto* optional = item.member ("optional");
+        if (item.kind != Json::Kind::Object || ! text ("key", f.key, true) || ! text ("type", f.type, true) || ! text ("of", f.of, false)
+            || ! text ("min", f.min, false) || ! text ("max", f.max, false) || (optional && optional->kind != Json::Kind::Bool))
+            return std::nullopt;
+        f.optional = optional && optional->text == "true";
+        if (const auto* nested = item.member ("fields"))
+        {
+            auto inner = fields (*nested);
+            if (! inner) return std::nullopt;
+            f.fields = std::move (*inner);
+        }
+        out.push_back (std::move (f));
+    }
+    return out;
+}
+// Empty when the reader found exactly the expected problems, in order.
+std::string problemsDiffer (const Report& report, const Json& expected)
+{
+    if (expected.kind != Json::Kind::Array) return "problems is not an array";
+    std::vector<schema_cases::Expected> wanted;
+    for (const auto& p : expected.items)
+    {
+        const auto* fault = p.member ("fault");
+        const auto* severity = p.member ("severity");
+        const auto* path = p.member ("path");
+        const auto* line = p.member ("line");
+        const auto* column = p.member ("column");
+        if (! fault || ! severity || ! path || ! line || ! column || line->kind != Json::Kind::Number || column->kind != Json::Kind::Number
+            || line->text.size() > 9 || column->text.size() > 9 || line->text.find_first_not_of ("0123456789") != std::string::npos
+            || column->text.find_first_not_of ("0123456789") != std::string::npos)
+            return "a problem is not {fault, severity, path, line, column}";
+        Fault f = Fault::Missing;
+        bool known = false;
+        for (const auto candidate : { Fault::Missing, Fault::WrongType, Fault::OutOfRange, Fault::UnknownKey, Fault::Refused })
+            if (fault->text == faultName (candidate)) { f = candidate; known = true; }
+        if (! known || (severity->text != "error" && severity->text != "warning")) return "an unknown fault or severity";
+        wanted.push_back ({ f, severity->text == "error" ? Severity::Error : Severity::Warning, path->text,
+                            std::uint32_t (std::stoul (line->text)), std::uint32_t (std::stoul (column->text)) });
+    }
+    const auto got = schema_cases::spelled (schema_cases::found (report)), want = schema_cases::spelled (wanted);
+    return got == want ? std::string() : "expected\n" + want + "got\n" + got;
+}
+// Empty when the positions file lists exactly the tree's positions, in its depth-first order.
+std::string positionsDiffer (const Table& tree, const Json& expected)
+{
+    const auto actual = fixtures::locate (tree);
+    if (expected.kind != Json::Kind::Array) return "not a JSON array";
+    if (expected.items.size() != actual.size())
+        return unsignedText (actual.size()) + " positions, expected " + unsignedText (expected.items.size());
+    const auto pair = [] (const Json* j, std::uint32_t& line, std::uint32_t& column)
+    {
+        if (j == nullptr || j->kind != Json::Kind::Array || j->items.size() != 2) return false;
+        for (const auto* n : { &j->items[0], &j->items[1] })
+            if (n->kind != Json::Kind::Number || n->text.empty() || n->text.size() > 9 || n->text.find_first_not_of ("0123456789") != std::string::npos) return false;
+        line = std::uint32_t (std::stoul (j->items[0].text)); column = std::uint32_t (std::stoul (j->items[1].text));
+        return true;
+    };
+    std::size_t sourced = 0;
+    for (std::size_t i = 0; i < actual.size(); ++i)
+    {
+        const auto& e = expected.items[i];
+        const auto* path = e.member ("path");
+        if (e.kind != Json::Kind::Object || path == nullptr || path->kind != Json::Kind::Array) return "entry " + unsignedText (i) + " has no path";
+        std::string spelled = "[";
+        for (const auto& component : path->items)
+            spelled += (spelled.size() == 1 ? "" : ", ") + (component.kind == Json::Kind::String ? fixtures::jsonString (component.text) : component.text);
+        spelled += "]";
+        const auto where = spelled + ": ";
+        if (spelled != actual[i].path) return where + "expected here, the tree has " + actual[i].path;
+        std::uint32_t line = 0, column = 0;
+        if (! pair (e.member ("at"), line, column) || line != actual[i].at.line || column != actual[i].at.column)
+            return where + "at " + unsignedText (actual[i].at.line) + ":" + unsignedText (actual[i].at.column);
+        const auto* key = e.member ("key");
+        if ((key != nullptr) != actual[i].keyed) return where + (actual[i].keyed ? "missing key position" : "an item has no key");
+        if (key && (! pair (key, line, column) || line != actual[i].key.line || column != actual[i].key.column))
+            return where + "key at " + unsignedText (actual[i].key.line) + ":" + unsignedText (actual[i].key.column);
+        // An overlay's positions also say which layer each value (and its key) came from.
+        if (const auto* source = e.member ("source"))
+        {
+            ++sourced;
+            if (source->kind != Json::Kind::Number || source->text != unsignedText (actual[i].at.source)
+                || (actual[i].keyed && actual[i].key.source != actual[i].at.source))
+                return where + "source " + unsignedText (actual[i].at.source);
+        }
+        if (e.keys.size() != (key ? 3u : 2u) + (e.member ("source") ? 1u : 0u)) return where + "unexpected members";
+    }
+    if (sourced != 0 && sourced != actual.size()) return "a source on some entries only";
+    return {};
 }
 }
 
@@ -329,7 +439,7 @@ int main (int argc, char** argv)
     const fs::path corpus = argv[1];
 
     test::group ("valid: the expected tree, the canonical text byte for byte, and the canonical text's tree");
-    std::size_t jsonFiles = 0;
+    std::size_t jsonFiles = 0, positioned = 0;
     const auto valid = documents (corpus / "valid", jsonFiles);
     for (const auto& name : valid)
     {
@@ -345,6 +455,13 @@ int main (int argc, char** argv)
         const auto& canonical = canonicalFile ? *canonicalFile : *text;
         test::ok (tree != nullptr && writeChecked (*tree) == canonical, "valid/" + name + ": write() differs from the canonical text");
         if (canonicalFile) test::ok (treeDiffers (parse (canonical), *expected).empty(), "valid/" + name + ": the canonical text's tree differs");
+        if (const auto positions = readJson (base.string() + ".positions.json"); positions && tree)
+        {
+            ++positioned;
+            const auto differs = positionsDiffer (*tree, *positions);
+            test::ok (differs.empty(), "valid/" + name + ".positions.json: " + differs);
+        }
+        else test::ok (! fs::exists (base.string() + ".positions.json"), "valid/" + name + ".positions.json: unreadable");
     }
     test::ok (jsonFiles == valid.size(), "valid/: every .json belongs to a .toml");
 
@@ -374,6 +491,61 @@ int main (int argc, char** argv)
     test::ok (jsonFiles == invalid.size(), "invalid/: every .json belongs to a .toml");
     test::ok (! valid.empty() && ! invalid.empty(), "the corpus was found and is not empty");
 
-    std::printf ("corpus: %s valid and %s invalid documents\n", unsignedText (valid.size()).c_str(), unsignedText (invalid.size()).c_str());
+    test::group ("overlay: base (source 1) under top (source 2) gives the tree, the canonical text and the positions");
+    std::vector<std::string> layered;
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator (corpus / "overlay", ec))
+        if (const auto file = entry.path().filename().string(); endsWith (file, ".base.toml"))
+            layered.push_back (file.substr (0, file.size() - std::string_view (".base.toml").size()));
+    std::sort (layered.begin(), layered.end());
+    for (const auto& name : layered)
+    {
+        const auto base = (corpus / "overlay" / name).string();
+        const auto below = slurp (base + ".base.toml"), above = slurp (base + ".top.toml"), canonical = slurp (base + ".canonical.toml");
+        const auto expected = readJson (base + ".json"), positions = readJson (base + ".positions.json");
+        if (! below || ! above || ! canonical || ! expected || ! positions) { test::ok (false, "overlay/" + name + ": a file is missing"); continue; }
+        const auto b = parse (*below, 1), t = parse (*above, 2);
+        if (! std::holds_alternative<Table> (b) || ! std::holds_alternative<Table> (t)) { test::ok (false, "overlay/" + name + ": a layer is refused"); continue; }
+        const ParseResult merged = overlay (std::get<Table> (b), std::get<Table> (t));
+        const auto why = treeDiffers (merged, *expected);
+        test::ok (why.empty(), "overlay/" + name + ": " + why);
+        test::ok (writeChecked (std::get<Table> (merged)) == *canonical, "overlay/" + name + ": write() differs from the canonical text");
+        const auto differs = positionsDiffer (std::get<Table> (merged), *positions);
+        test::ok (differs.empty(), "overlay/" + name + ".positions.json: " + differs);
+    }
+    test::ok (! layered.empty(), "the overlay cases were found");
+
+    test::group ("schema: the fields read, the values they gave, and exactly the expected problems");
+    jsonFiles = 0;
+    const auto schemas = documents (corpus / "schema", jsonFiles);
+    for (const auto& name : schemas)
+    {
+        const auto base = (corpus / "schema" / name).string();
+        const auto text = slurp (base + ".toml");
+        const auto spec = readJson (base + ".json");
+        const auto* unknown = spec ? spec->member ("unknownKeys") : nullptr;
+        const auto* read = spec ? spec->member ("read") : nullptr;
+        const auto* problems = spec ? spec->member ("problems") : nullptr;
+        const auto list = spec && spec->member ("fields") ? fields (*spec->member ("fields")) : std::nullopt;
+        if (! text || ! unknown || ! read || ! problems || ! list || (unknown->text != "error" && unknown->text != "warning"))
+        {
+            test::ok (false, "schema/" + name + ": unreadable .toml, or not {unknownKeys, fields, read, problems}");
+            continue;
+        }
+        const auto document = parse (*text);
+        if (! std::holds_alternative<Table> (document)) { test::ok (false, "schema/" + name + ": the document is refused"); continue; }
+        Report report;
+        const ParseResult values = schema_cases::run (std::get<Table> (document),
+                                                      { *list, unknown->text == "error" ? Severity::Error : Severity::Warning }, report);
+        const auto why = treeDiffers (values, *read);
+        test::ok (why.empty(), "schema/" + name + ": the values read: " + why);
+        const auto differs = problemsDiffer (report, *problems);
+        test::ok (differs.empty(), "schema/" + name + ": " + differs);
+    }
+    test::ok (! schemas.empty() && jsonFiles == schemas.size(), "the schema cases were found, each with its .json");
+
+    std::printf ("corpus: %s valid documents (%s with positions), %s invalid documents, %s overlays, %s schema cases\n",
+                 unsignedText (valid.size()).c_str(), unsignedText (positioned).c_str(), unsignedText (invalid.size()).c_str(),
+                 unsignedText (layered.size()).c_str(), unsignedText (schemas.size()).c_str());
     return test::report();
 }

@@ -1,0 +1,16 @@
+name = "Warm master"
+ceiling = -1.000
+rate = 48_000
+dither = false
+freqs = [20, 1000, 20000]
+steps = [1, 2]        # integers read as 1.0 and 2.0
+labels = ["a", "Київ"]
+flags = [true]
+limiter = { release = 0.050 }
+[[bands]]
+f = 100
+gain = 1
+[[bands]]
+f = 1000
+gain = -2.50
+type = "shelf"

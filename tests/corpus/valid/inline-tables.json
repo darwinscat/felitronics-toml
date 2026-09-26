@@ -1,0 +1,22 @@
+{
+  "a": {},
+  "b": {
+    "x": {"type": "integer", "value": "1"},
+    "y": {"type": "string", "value": "s"},
+    "z": [{"type": "integer", "value": "1"}, {"type": "integer", "value": "2"}],
+    "t": {
+      "u": {"type": "bool", "value": "true"}
+    }
+  },
+  "c": {
+    "quoted key": {"type": "integer", "value": "1"},
+    "d": {
+      "e": {"type": "integer", "value": "2"},
+      "f": {"type": "decimal", "value": "-0.50"}
+    }
+  },
+  "g": {
+    "s": {"type": "string", "value": "line\u000aline"},
+    "h": [{"type": "integer", "value": "1"}, {"type": "integer", "value": "2"}]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "a": {"type": "string", "value": "say \"hi\"\u000a\"\"x\"\u0009\\\u000d\u000a"},
+  "b": [{"type": "string", "value": "a\u000ab"}],
+  "t": {
+    "c": {"type": "string", "value": "\u000a"}
+  }
+}

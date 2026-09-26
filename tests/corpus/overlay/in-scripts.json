@@ -1,0 +1,7 @@
+{
+  "Київ": {
+    "ключ": {"type": "string", "value": "é"},
+    "العربية": {"type": "integer", "value": "2"}
+  },
+  "😀": {"type": "integer", "value": "1"}
+}
