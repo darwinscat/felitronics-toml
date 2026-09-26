@@ -394,6 +394,76 @@ empty string on the same refusal; use `writeChecked` when the empty-root distinc
 matters. Construction does not silently clamp or repair data. Empty `Array{}` is
 representable as `[]`; empty `Tables{}` is not representable: an empty array is `Array{}`.
 
+## Typed reading: `<felitronics/toml/Schema.h>`
+
+An optional header over the parser. It reads fields into an application's own structs,
+with a type, a range, a default or a requirement for each, and reports every key the
+application did not read. It has no macros and no reflection: a schema is the code that
+reads the struct, one function per struct, and they compose by calling each other.
+
+```cpp
+struct Limiter { double ceiling = -1.0; int lookahead = 5; };
+Limiter limiter;
+Report report = read (root, [&] (Reader& in)
+{
+    in.table ("limiter", Need::Required, [&] (Reader& t)
+    {
+        t.required ("ceiling", limiter.ceiling, { -12.0, 0.0 });
+        t.optional ("lookahead", limiter.lookahead, { 0, 50 });   // keeps 5 when absent
+    });
+});
+for (const Problem& p : report.problems) { /* faultName(p.fault), p.path, p.position */ }
+```
+
+**Fields.** `required(key, out, range)` and `optional(key, out, range)` store a value into
+`out` and return true, or leave `out` unchanged and return false. An absent optional
+field keeps the value `out` already had, which is its default; an absent required field is
+a `Missing` problem. The field types are `bool`, `std::string`, `Decimal`, `double`, any
+standard integer type, and `std::vector` of any of these for a scalar array. An integer
+field takes an integer that fits its type, else `OutOfRange`. A `double` field takes a
+decimal's correctly rounded value. `Range<T>{min, max}` is inclusive, and either bound
+may be absent; for a vector it applies to each item, and the first item that fails is the
+one reported. Decimal bounds compare exactly across scales: `1.5` equals `1.50`, `-0.0`
+equals `0.0`, and `12.000000001` is above `12.0`. A decimal bound that is not a valid
+`Decimal` refuses every value.
+
+**Integers where a decimal is expected.** The parser keeps integers and decimals apart;
+this layer accepts an integer for a `Decimal` or `double` field, losslessly: `n` reads as
+`n.0`, mantissa `n × 10` at scale 1, the very value a document spelling `n.0` gives. Scale
+1 is the smallest scale a `Decimal` has, so nothing is invented. That holds while
+`|n| <= 900719925474099` (2^53 / 10); a larger integer is `OutOfRange`. `-0` is integer 0
+and reads as `0.0`. `asDecimal(value)` applies the same rule to a single `Value`.
+
+**Tables.** `table(key, need, fn)` calls `fn(Reader&)` for the sub-table at `key`;
+`tables(key, need, fn)` calls it for each table of an array of tables, in order. Both
+spellings of an array of tables read alike, and `[]` is an array of no tables. Anything
+else at the key is `WrongType`. `field(key, need)` returns the raw `Value` for a type of the
+application's own, and `refuse(key, detail)` reports that its own check refused a value,
+with its own number in `Problem::detail`.
+
+**Unknown keys.** Every key read in any way (a field, a failed field, `field()`, a table)
+is known. When a sub-table's or a row's callback returns, and at the end of `read()`, each
+key of that table that nothing read is an `UnknownKey` problem at the key: this is how a
+typo like `ceilng` is caught instead of silently ignored. `ReadOptions{Severity::Warning}`
+makes those problems warnings; all other problems are errors, and `Report::ok()` is true
+when there is no error.
+
+**Problems.** `Problem{fault, severity, path, position, detail}`, in the order found:
+fields in the order they are read, a sub-table's or a row's problems when it is read, its
+unknown keys when it is done. `path` spells the key path as the writer spells keys, with
+an array element by index: `limiter.release`, `"quoted key".x`, `bands[2].gain`.
+
+| Fault | When | Position |
+|---|---|---|
+| `Missing` | A required key is absent | The table that lacks it (a parsed root is at 1:1) |
+| `WrongType` | The value, or an array item, has another type | The value or the item |
+| `OutOfRange` | Outside the range, or not representable in the field's type | The value or the item |
+| `UnknownKey` | A key nothing read | The key |
+| `Refused` | The application's own check refused it | The value, or the table when the key is absent |
+
+Positions carry their `source`, so after `overlay()` a problem names the layer, the file
+the user has to fix. `faultName()` gives stable identifiers for logs.
+
 ## Layers: `overlay()`
 
 ```cpp

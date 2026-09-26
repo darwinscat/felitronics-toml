@@ -1,0 +1,11 @@
+name = "x"
+ceiling = 0.000000001
+rate = 7999
+freqs = [20, 19, 30000]
+limiter = { release = 0.0009, lookahead = 50 }
+[[bands]]
+f = 20001
+gain = -24.000000001
+[[bands]]
+f = 20
+gain = -24.00

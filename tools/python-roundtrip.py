@@ -12,8 +12,10 @@ python3 tools/python-roundtrip.py --corpus tests/corpus
     invisible to tomllib and is checked by the C++ runner. Invalid documents carry codes and positions of this
     subset, which tomllib cannot check: they are counted, and how many of them tomllib also rejects is reported.
 """
+import decimal
 import json
 import pathlib
+import re
 import struct
 import subprocess
 import sys
@@ -156,6 +158,125 @@ def check_overlay(root):
     return len(cases)
 
 
+def key_text(key):
+    """A key in a problem's path, spelled as the writer spells keys: bare when it can be, else a basic string."""
+    if re.fullmatch(r"[A-Za-z0-9_-]+", key):
+        return key
+    short = {'"': '\\"', "\\": "\\\\", "\b": "\\b", "\n": "\\n", "\f": "\\f", "\r": "\\r"}
+    out = ""
+    for c in key:
+        if c in short:
+            out += short[c]
+        elif (ord(c) < 0x20 and c != "\t") or ord(c) == 0x7F:
+            out += f"\\u{ord(c):04X}"
+        else:
+            out += c
+    return '"' + out + '"'
+
+
+def join(path, key):
+    return (path + "." if path else "") + key_text(key)
+
+
+def convert(value, kind, field):
+    """(fault, the value read as its tagged JSON) for one scalar, by the rules of docs/TOML-SUBSET.md."""
+    low, high = field.get("min"), field.get("max")
+    if kind == "string" or kind == "bool":
+        ok = type(value) is (str if kind == "string" else bool)
+        return (None, {"type": kind, "value": value if kind == "string" else str(value).lower()}) if ok else ("WrongType", None)
+    if kind == "integer":
+        if type(value) is not int:
+            return "WrongType", None
+        if (low is not None and value < int(low)) or (high is not None and value > int(high)):
+            return "OutOfRange", None
+        return None, {"type": "integer", "value": str(value)}
+    # decimal: a decimal, or an integer n read as n.0 while |n| <= 2^53 / 10
+    if type(value) is int:
+        if abs(value) > 900719925474099:
+            return "OutOfRange", None
+        value = decimal.Decimal(f"{value}.0")
+    elif type(value) is not decimal.Decimal:
+        return "WrongType", None
+    if (low is not None and value < decimal.Decimal(low)) or (high is not None and value > decimal.Decimal(high)):
+        return "OutOfRange", None
+    return None, {"type": "decimal", "value": format(value, "f")}
+
+
+def read_fields(table, fields, path, problems, unknown):
+    """Reader, written again from its rules: fields in order, a sub-table's or a row's problems when it is read, then
+    the table's own unread keys. Returns the tagged tree of the values read."""
+    out, used = {}, set()
+    for field in fields:
+        key, kind = field["key"], field["type"]
+        at = join(path, key)
+        if key not in table:
+            if not field.get("optional", False):
+                problems.append(("Missing", "error", at))
+            continue
+        used.add(key)
+        value = table[key]
+        if kind == "table":
+            if type(value) is not dict:
+                problems.append(("WrongType", "error", at))
+            else:
+                out[key] = read_fields(value, field["fields"], at, problems, unknown)
+        elif kind == "tables":
+            if value == []:
+                out[key] = []
+            elif type(value) is not list or not all(type(row) is dict for row in value):
+                problems.append(("WrongType", "error", at))
+            else:
+                out[key] = [read_fields(row, field["fields"], f"{at}[{i}]", problems, unknown) for i, row in enumerate(value)]
+        elif kind == "array":
+            if type(value) is not list:
+                problems.append(("WrongType", "error", at))
+                continue
+            items = []
+            for i, item in enumerate(value):
+                fault, read = convert(item, field["of"], field)
+                if fault:
+                    problems.append((fault, "error", f"{at}[{i}]"))
+                    break
+                items.append(read)
+            else:
+                out[key] = items
+        else:
+            fault, read = convert(value, kind, field)
+            if fault:
+                problems.append((fault, "error", at))
+            else:
+                out[key] = read
+    problems.extend(("UnknownKey", unknown, join(path, key)) for key in table if key not in used)
+    return out
+
+
+def check_schema(root):
+    """Each case must read in tomllib; reading it again here, from the rules, must give the same values and the same
+    problems in the same order; and each problem's position must point at what it names: the value, the key, or the
+    table that lacks a key."""
+    cases = sorted((root / "schema").glob("*.toml"))
+    for document in cases:
+        text = document.read_bytes().decode("utf-8")
+        spec = json.loads(document.with_suffix(".json").read_bytes().decode("utf-8"))
+        problems = []
+        values = read_fields(tomllib.loads(text, parse_float=decimal.Decimal), spec["fields"], "", problems, spec["unknownKeys"])
+        assert values == spec["read"], (document.name, values, spec["read"])
+        assert problems == [(p["fault"], p["severity"], p["path"]) for p in spec["problems"]], (document.name, problems)
+        lines = text.split("\n")
+        for p in spec["problems"]:
+            c = character_at(lines, [p["line"], p["column"]], p["path"])
+            spelled = lines[p["line"] - 1][p["column"] - 1:]
+            if p["fault"] == "UnknownKey":
+                ok = c == '"' or re.match(r"[A-Za-z0-9_-]", c)
+            elif p["fault"] == "Missing":
+                ok = [p["line"], p["column"]] == [1, 1] or c in "[{" or c == '"' or re.match(r"[A-Za-z0-9_-]", c)
+            else:
+                ok = c in '"[{tf+-' or c.isdigit()
+            assert ok, (document.name, p, spelled[:20])
+    assert cases, "no schema cases found"
+    return len(cases)
+
+
 def check_corpus(root):
     valid = sorted(p for p in (root / "valid").glob("*.toml") if not p.name.endswith(".canonical.toml"))
     texts = positioned = 0
@@ -179,9 +300,11 @@ def check_corpus(root):
             rejected += 1
     assert valid and invalid, "no corpus documents found"
     overlays = check_overlay(root)
+    schemas = check_schema(root)
     print(f"tomllib: {len(valid)} valid corpus documents ({texts} texts with their canonical forms) match their "
           f"expected trees, and {positioned} positions files point at their values; {len(invalid)} invalid documents, "
-          f"{rejected} of which tomllib rejects too; {overlays} overlays merge to their expected trees and sources")
+          f"{rejected} of which tomllib rejects too; {overlays} overlays merge to their expected trees and sources; "
+          f"{schemas} schema cases read to their values and problems")
 
 
 def main():

@@ -9,6 +9,7 @@
 #include <felitronics/toml/Toml.h>
 #include "toml_test.h"
 #include "Fixtures.h"
+#include "SchemaCases.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -325,6 +326,64 @@ std::vector<std::string> documents (const fs::path& dir, std::size_t& jsonFiles)
     std::sort (names.begin(), names.end());
     return names;
 }
+// The fields of a schema case, read back into the structures tools/make_corpus.cpp wrote them from.
+std::optional<std::vector<schema_cases::Field>> fields (const Json& j)
+{
+    if (j.kind != Json::Kind::Array) return std::nullopt;
+    std::vector<schema_cases::Field> out;
+    for (const auto& item : j.items)
+    {
+        schema_cases::Field f;
+        const auto text = [&] (const char* name, std::string& into, bool required)
+        {
+            const auto* m = item.member (name);
+            if (m == nullptr) return ! required;
+            if (m->kind != Json::Kind::String) return false;
+            into = m->text;
+            return true;
+        };
+        const auto* optional = item.member ("optional");
+        if (item.kind != Json::Kind::Object || ! text ("key", f.key, true) || ! text ("type", f.type, true) || ! text ("of", f.of, false)
+            || ! text ("min", f.min, false) || ! text ("max", f.max, false) || (optional && optional->kind != Json::Kind::Bool))
+            return std::nullopt;
+        f.optional = optional && optional->text == "true";
+        if (const auto* nested = item.member ("fields"))
+        {
+            auto inner = fields (*nested);
+            if (! inner) return std::nullopt;
+            f.fields = std::move (*inner);
+        }
+        out.push_back (std::move (f));
+    }
+    return out;
+}
+// Empty when the reader found exactly the expected problems, in order.
+std::string problemsDiffer (const Report& report, const Json& expected)
+{
+    if (expected.kind != Json::Kind::Array) return "problems is not an array";
+    std::vector<schema_cases::Expected> wanted;
+    for (const auto& p : expected.items)
+    {
+        const auto* fault = p.member ("fault");
+        const auto* severity = p.member ("severity");
+        const auto* path = p.member ("path");
+        const auto* line = p.member ("line");
+        const auto* column = p.member ("column");
+        if (! fault || ! severity || ! path || ! line || ! column || line->kind != Json::Kind::Number || column->kind != Json::Kind::Number
+            || line->text.size() > 9 || column->text.size() > 9 || line->text.find_first_not_of ("0123456789") != std::string::npos
+            || column->text.find_first_not_of ("0123456789") != std::string::npos)
+            return "a problem is not {fault, severity, path, line, column}";
+        Fault f = Fault::Missing;
+        bool known = false;
+        for (const auto candidate : { Fault::Missing, Fault::WrongType, Fault::OutOfRange, Fault::UnknownKey, Fault::Refused })
+            if (fault->text == faultName (candidate)) { f = candidate; known = true; }
+        if (! known || (severity->text != "error" && severity->text != "warning")) return "an unknown fault or severity";
+        wanted.push_back ({ f, severity->text == "error" ? Severity::Error : Severity::Warning, path->text,
+                            std::uint32_t (std::stoul (line->text)), std::uint32_t (std::stoul (column->text)) });
+    }
+    const auto got = schema_cases::spelled (schema_cases::found (report)), want = schema_cases::spelled (wanted);
+    return got == want ? std::string() : "expected\n" + want + "got\n" + got;
+}
 // Empty when the positions file lists exactly the tree's positions, in its depth-first order.
 std::string positionsDiffer (const Table& tree, const Json& expected)
 {
@@ -456,7 +515,37 @@ int main (int argc, char** argv)
     }
     test::ok (! layered.empty(), "the overlay cases were found");
 
-    std::printf ("corpus: %s valid documents (%s with positions), %s invalid documents, %s overlays\n", unsignedText (valid.size()).c_str(),
-                 unsignedText (positioned).c_str(), unsignedText (invalid.size()).c_str(), unsignedText (layered.size()).c_str());
+    test::group ("schema: the fields read, the values they gave, and exactly the expected problems");
+    jsonFiles = 0;
+    const auto schemas = documents (corpus / "schema", jsonFiles);
+    for (const auto& name : schemas)
+    {
+        const auto base = (corpus / "schema" / name).string();
+        const auto text = slurp (base + ".toml");
+        const auto spec = readJson (base + ".json");
+        const auto* unknown = spec ? spec->member ("unknownKeys") : nullptr;
+        const auto* read = spec ? spec->member ("read") : nullptr;
+        const auto* problems = spec ? spec->member ("problems") : nullptr;
+        const auto list = spec && spec->member ("fields") ? fields (*spec->member ("fields")) : std::nullopt;
+        if (! text || ! unknown || ! read || ! problems || ! list || (unknown->text != "error" && unknown->text != "warning"))
+        {
+            test::ok (false, "schema/" + name + ": unreadable .toml, or not {unknownKeys, fields, read, problems}");
+            continue;
+        }
+        const auto document = parse (*text);
+        if (! std::holds_alternative<Table> (document)) { test::ok (false, "schema/" + name + ": the document is refused"); continue; }
+        Report report;
+        const ParseResult values = schema_cases::run (std::get<Table> (document),
+                                                      { *list, unknown->text == "error" ? Severity::Error : Severity::Warning }, report);
+        const auto why = treeDiffers (values, *read);
+        test::ok (why.empty(), "schema/" + name + ": the values read: " + why);
+        const auto differs = problemsDiffer (report, *problems);
+        test::ok (differs.empty(), "schema/" + name + ": " + differs);
+    }
+    test::ok (! schemas.empty() && jsonFiles == schemas.size(), "the schema cases were found, each with its .json");
+
+    std::printf ("corpus: %s valid documents (%s with positions), %s invalid documents, %s overlays, %s schema cases\n",
+                 unsignedText (valid.size()).c_str(), unsignedText (positioned).c_str(), unsignedText (invalid.size()).c_str(),
+                 unsignedText (layered.size()).c_str(), unsignedText (schemas.size()).c_str());
     return test::report();
 }

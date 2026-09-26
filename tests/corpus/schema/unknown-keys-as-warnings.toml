@@ -1,0 +1,14 @@
+nmae = "x"
+name = "x"
+ceiling = -1.0
+[limitr]
+release = 0.1
+[limiter]
+relese = 0.1
+release = 0.1
+[[bands]]
+f = 100
+gain = 0.0
+gian = 1.0
+["ключ"]
+"日本語" = 1

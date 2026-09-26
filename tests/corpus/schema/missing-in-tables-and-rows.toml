@@ -1,0 +1,7 @@
+[limiter]
+lookahead = 1
+[[bands]]
+gain = 1.0
+[[bands]]
+f = 100
+["Київ".sub]

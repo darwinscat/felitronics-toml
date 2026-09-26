@@ -18,6 +18,8 @@ overlay/<name>.top.toml        a top layer, parsed with source 2
 overlay/<name>.json            the tree overlay(base, top) must give
 overlay/<name>.canonical.toml  what write() must produce for it
 overlay/<name>.positions.json  its positions, each with the source of the layer it came from
+schema/<name>.toml             a document read by a schema
+schema/<name>.json             the schema, the values it reads and the problems it reports
 ```
 
 ## Rules
@@ -43,6 +45,12 @@ overlay/<name>.positions.json  its positions, each with the source of the layer 
    the base (`docs/TOML-SUBSET.md`, "Layers"): the result equals `<name>.json`, writes `<name>.canonical.toml`
    byte for byte, and has the positions in `<name>.positions.json`, whose records also carry `"source"`, the
    layer each value and its key came from.
+6. **Schemas.** `<name>.json` holds `unknownKeys` (`"error"` or `"warning"`), `fields`, `read` and `problems`.
+   Each field is `{"key", "type"}` with `type` one of `string`, `integer`, `decimal`, `bool`, `array` (with `"of"`,
+   the item type), `table` and `tables` (both with `"fields"`), plus optional `"optional": true` and `"min"` and
+   `"max"`, inclusive bounds spelled as TOML values. Read the fields in order from `<name>.toml` as
+   `docs/TOML-SUBSET.md` ("Typed reading") says: the values read, as a tree in the tagged JSON above, equal
+   `read`, and the problems, in order, equal `problems`: `{"fault", "severity", "path", "line", "column"}`.
 
 ## Tree encoding
 
