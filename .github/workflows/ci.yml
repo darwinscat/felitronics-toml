@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: MIT
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Every row runs the same six tests, and the property suite must print the same corpus digest on each
+  # (ctest pins it), so "every platform reads the same bits" is checked, not assumed.
+  build-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: ubuntu-gcc-14, os: ubuntu-latest, cxx: g++-14 }
+          - { name: ubuntu-clang, os: ubuntu-latest, cxx: clang++ }
+          - { name: macos-apple-clang, os: macos-latest }
+          - { name: windows-msvc, os: windows-latest }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cxx && format('-DCMAKE_CXX_COMPILER={0}', matrix.cxx) || '' }}
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
+
+  sanitizers:
+    name: ubuntu-clang-asan-ubsan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure (Debug, ASan + UBSan, every finding fatal)
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        env:
+          # LeakSanitizer exists on Linux only: this is the row where a leak fails the build.
+          ASAN_OPTIONS: halt_on_error=1:detect_leaks=1:strict_string_checks=1:detect_stack_use_after_return=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure --no-tests=error
+
+  wasm:
+    name: wasm (emsdk 6.0.9, node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install emsdk 6.0.9
+        run: |
+          git clone --depth 1 --branch 6.0.9 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          "$HOME/emsdk/emsdk" install 6.0.9
+          "$HOME/emsdk/emsdk" activate 6.0.9
+      - name: Configure and build, exceptions and RTTI off
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "-DCMAKE_CXX_FLAGS=-fno-exceptions -fno-rtti"
+          cmake --build build --parallel
+      - name: Test in node
+        # The Emscripten toolchain sets the crosscompiling emulator, so ctest runs each .js through node.
+        run: |
+          source "$HOME/emsdk/emsdk_env.sh"
+          ctest --test-dir build --output-on-failure --no-tests=error
+
+  tomllib:
+    name: tomllib cross-check (Python 3.11)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Build the property suite
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel --target felitronics_toml_properties_tests
+      - name: Generated canonical documents, read by tomllib
+        run: python tools/python-roundtrip.py build/tests/felitronics_toml_properties_tests
+      - name: The conformance corpus, read by tomllib
+        run: python tools/python-roundtrip.py --corpus tests/corpus
+
+  fuzz:
+    name: libFuzzer (60 s, seeded with the corpus)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the fuzz target (clang, ASan + UBSan)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ \
+                -DFELITRONICS_TOML_FUZZ=ON -DFELITRONICS_TOML_BUILD_TESTS=OFF
+          cmake --build build --target felitronics_toml_fuzz
+      - name: Fuzz
+        run: |
+          # Seeds: the corpus documents under 4 KiB, prefixed because valid/ and invalid/ share names. With the
+          # megabyte limit documents among them, a local 60 s run managed 20650 executions and coverage 859;
+          # without them, 2.5 million and 893.
+          mkdir -p fuzz-corpus
+          for kind in valid invalid; do
+            find "tests/corpus/$kind" -name '*.toml' -size -4k | while read -r f; do cp "$f" "fuzz-corpus/$kind-$(basename "$f")"; done
+          done
+          build/felitronics_toml_fuzz fuzz-corpus -max_total_time=60 -max_len=1048577 -print_final_stats=1
