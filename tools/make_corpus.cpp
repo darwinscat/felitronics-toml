@@ -206,7 +206,43 @@ int main (int argc, char** argv)
     invalid ("underscore-above-int64", "a=9_223_372_036_854_775_808", Code::IntegerRange, 1, 3);
     invalid ("underscore-in-array-item", "a=[1_0, 2__0]", Code::InvalidNumber, 1, 9);
     invalid ("nested-array", "a=[[0]]", Code::UnsupportedValue, 1, 4);
-    invalid ("inline-table", "a={}", Code::UnsupportedValue, 1, 3);
+    // --- inline tables: one line, no trailing comma, a value closed to later headers and dotted keys --------------
+    invalid ("inline-trailing-comma", "a={x=1,}", Code::ExpectedKey, 1, 8);
+    invalid ("inline-leading-comma", "a={,}", Code::ExpectedKey, 1, 4);
+    invalid ("inline-line-ending-before-brace", "a={x=1\n}", Code::UnterminatedInlineTable, 1, 7);
+    invalid ("inline-line-ending-after-comma", "a={x=1,\ny=2}", Code::UnterminatedInlineTable, 1, 8);
+    invalid ("inline-crlf-before-brace", "a={x=1\r\n}", Code::UnterminatedInlineTable, 1, 7);
+    invalid ("inline-unterminated", "a={", Code::UnterminatedInlineTable, 1, 4);
+    invalid ("inline-comment", "a={ # c\n}", Code::UnterminatedInlineTable, 1, 5);
+    invalid ("inline-line-ending-after-key", "a={x\n}", Code::UnterminatedInlineTable, 1, 5);
+    invalid ("inline-line-ending-after-equals", "a={x=\n1}", Code::UnterminatedInlineTable, 1, 6);
+    invalid ("inline-eof-after-key", "a={x", Code::UnterminatedInlineTable, 1, 5);
+    invalid ("inline-eof-after-equals", "a={x=", Code::UnterminatedInlineTable, 1, 6);
+    invalid ("inline-comment-after-equals", "a={x = # c\n1}", Code::UnterminatedInlineTable, 1, 8);
+    invalid ("inline-line-ending-in-dotted-key", "a={b.\nc=1}", Code::UnterminatedInlineTable, 1, 6);
+    invalid ("inline-missing-separator", "a={x=1 y=2}", Code::ExpectedInlineTableSeparator, 1, 8);
+    invalid ("inline-closed-by-bracket", "a={x=1]", Code::ExpectedInlineTableSeparator, 1, 7);
+    invalid ("inline-missing-value", "a={x=}", Code::ExpectedValue, 1, 6);
+    invalid ("inline-missing-equals", "a={x}", Code::ExpectedEquals, 1, 5);
+    invalid ("inline-extra-brace", "a={x=1}}", Code::TrailingCharacters, 1, 8);
+    invalid ("inline-duplicate-key", "a={x=1,x=2}", Code::DuplicateKey, 1, 8);
+    invalid ("inline-dotted-table-then-value", "a={x.y=1,x=2}", Code::TableValueConflict, 1, 10);
+    invalid ("inline-nested-then-dotted-key", "a={x={z=1},x.y=2}", Code::TableValueConflict, 1, 12);
+    invalid ("inline-then-dotted-key", "a={}\na.b=1", Code::TableValueConflict, 2, 1);
+    invalid ("inline-then-header", "a={}\n[a]", Code::TableValueConflict, 2, 2);
+    invalid ("inline-then-subtable-header", "a={x=1}\n[a.y]", Code::TableValueConflict, 2, 2);
+    invalid ("inline-then-array-of-tables-header", "a={x=1}\n[[a.y]]", Code::TableValueConflict, 2, 3);
+    invalid ("inline-array-then-array-of-tables", "a=[{}]\n[[a]]", Code::TableValueConflict, 2, 3);
+    invalid ("inline-array-then-subtable-header", "a=[{}]\n[a.b]", Code::TableValueConflict, 2, 2);
+    invalid ("inline-then-value", "a={}\na=1", Code::DuplicateKey, 2, 1);
+    invalid ("dotted-table-then-inline", "a.b=1\na={}", Code::TableValueConflict, 2, 1);
+    invalid ("header-table-then-inline", "[t.a]\n[t]\na={}", Code::TableValueConflict, 3, 1);
+    invalid ("inline-array-scalar-then-table", "a=[1,{}]", Code::MixedArray, 1, 6);
+    invalid ("inline-array-table-then-scalar", "a=[{},1]", Code::MixedArray, 1, 7);
+    invalid ("inline-array-nested-array", "a=[{},[1]]", Code::UnsupportedValue, 1, 7);
+    invalid ("inline-array-element-error-first", "a=[{x=01},1]", Code::InvalidNumber, 1, 7);
+    invalid ("inline-array-missing-comma", "a=[{} {}]", Code::ExpectedArraySeparator, 1, 7);
+    invalid ("inline-array-unterminated", "a=[{}", Code::UnterminatedArray, 1, 6);
     invalid ("multiline-unterminated", "a=\"\"\"x", Code::UnterminatedString, 1, 7);
     invalid ("multiline-unterminated-after-line", "a=\"\"\"x\n", Code::UnterminatedString, 2, 1);
     invalid ("multiline-six-closing-quotes", "a=\"\"\"x\"\"\"\"\"\"", Code::TrailingCharacters, 1, 12);
@@ -235,6 +271,19 @@ int main (int argc, char** argv)
     valid ("limit-depth-header", "[" + path (kMaxDepth) + "]");
     invalid ("limit-depth-header", "[" + path (kMaxDepth + 1) + "]", Code::DepthLimit, 1, 34);
     invalid ("limit-depth-header-plus-key", "[" + path (kMaxDepth) + "]\nx=0", Code::DepthLimit, 2, 1);
+    // An inline table's keys continue its key's path; an element's keys are one level below its array's key.
+    valid ("limit-depth-inline", path (kMaxDepth - 1) + " = { x = 1 }");
+    invalid ("limit-depth-inline", path (kMaxDepth) + " = { x = 1 }", Code::DepthLimit, 1, 37);
+    valid ("limit-depth-inline-array", "[" + path (kMaxDepth - 2) + "]\nb = [{ c = 1 }]");
+    invalid ("limit-depth-inline-array", "[" + path (kMaxDepth - 1) + "]\nb = [{ c = 1 }]", Code::DepthLimit, 2, 8);
+    std::string nested = "a = ", close;
+    for (std::size_t i = 1; i < kMaxDepth; ++i) { nested += "{ a = "; close += " }"; }
+    valid ("limit-depth-nested-inline", nested + "1" + close);
+    invalid ("limit-depth-nested-inline", nested + "{ a = 1 }" + close, Code::DepthLimit, 1, 97);
+    std::string rowsOpen, rowsClose; // arrays of inline tables inside each other: each level one key deeper
+    for (std::size_t i = 1; i < kMaxDepth; ++i) { rowsOpen += "a = [{ "; rowsClose += " }]"; }
+    valid ("limit-depth-nested-inline-arrays", rowsOpen + "x = 1" + rowsClose);
+    invalid ("limit-depth-nested-inline-arrays", rowsOpen + "a = [{ x = 1 }]" + rowsClose, Code::DepthLimit, 1, 113);
     valid ("limit-bare-key", std::string (kMaxKey, 'a') + "=0");
     invalid ("limit-bare-key", std::string (kMaxKey + 1, 'a') + "=0", Code::KeyLimit, 1, 257);
     valid ("limit-quoted-key", "\"" + std::string (kMaxKey, 'a') + "\"=0");
@@ -256,6 +305,11 @@ int main (int argc, char** argv)
     for (std::size_t i = 0; i < kMaxEntries - 1; ++i) tables += "[[a]]\n";
     valid ("limit-entries-array-of-tables", tables);
     invalid ("limit-entries-array-of-tables", tables + "[[a]]", Code::EntryLimit, 65536, 3);
+    // Each element of an inline array counts as it is appended, the array's key after them.
+    std::string rows = "a=[";
+    for (std::size_t i = 0; i + 1 < kMaxEntries; ++i) rows += "{},";
+    valid ("limit-entries-inline-array", rows + "]");
+    invalid ("limit-entries-inline-array", rows + "{}]", Code::EntryLimit, 1, 1);
     Table full; // a canonical document of exactly 1 MiB, built from strings as tests/GrammarTests.cpp builds it
     for (int i = 0; i < 15; ++i) fixtures::put (full, "s" + number (std::size_t (i)), std::string (65536, 'x'));
     fixtures::put (full, "tail", std::string (kMaxDocument - write (full).size() - 10, 'x'));
@@ -342,6 +396,17 @@ int main (int argc, char** argv)
     valid ("decimal-signed-zero-and-scale", "a=[-0.0,0.00,-1.000]");
     valid ("bool-array", "a=[true,false]");
     valid ("utf8-string-array", "a=[\"\xC3\xA9\",\"\xF0\x9F\x98\x80\"]");
+    valid ("inline-tables", "a = {}\n"
+                            "b = { x = 1, y = \"s\", z = [1, 2], t = { u = true } }\n"
+                            "c = { \"quoted key\" = 1, d.e = 2, d.f = -0.50 }\n"
+                            "g = {s=\"\"\"line\nline\"\"\",h=[\n1, # a comment\n2,\n]}  # a multi-line value inside is fine\n");
+    valid ("inline-array-of-tables", "rows = [\n  { f = 100, gain = -1.5 },\n\t{ f = 1_000, gain = 0.0 }, # a comment\n]\n"
+                                     "compact = [{a=1},{a=2}]\n"
+                                     "nested = [{ b = [{ c = 1 }] }]\n");
+    valid ("inline-tables-under-headers", "[[a]]\nb = { c = 1 }\n[[a]]\nb = [{ c = 2 }]\n[t]\ni = { j = 6 }\nk = 1\n");
+    valid ("inline-table-as-dotted-value", "a.b = { c = 1 }\na.d = 2\n");
+    valid ("inline-tables-in-scripts", "\"" + fixtures::kyiv + "\" = { \"" + fixtures::klyuch + "\" = \"" + fixtures::nihongo + "\", \""
+                                       + fixtures::smile + "\" = [{ \"" + fixtures::arabiyya + "\" = 1 }] }\n");
     valid ("multiline-strings", "a = \"\"\"\nline one\nline two\"\"\"\n"
                                 "b = \"\"\"one line\"\"\"\n"
                                 "c = \"\"\"one \\\n    two\"\"\"\n"

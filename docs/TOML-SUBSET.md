@@ -49,7 +49,8 @@ are checked independently of that.
 A `Value` wraps a public `data` variant of `std::string`, `std::int64_t`, `Decimal`,
 `bool`, `Array` (`std::vector<Value>`), `Table`, and `Tables` (`std::vector<Table>`).
 An `Array` contains only one scalar alternative; an empty array has no element type.
-`Tables` is a nonempty array of tables and is distinct from `Array`. Construct integers
+`Tables` is a nonempty array of tables and is distinct from `Array`, whether the document
+spelled it with `[[headers]]` or as an array of inline tables: both are the same data. Construct integers
 explicitly as `std::int64_t` to distinguish them from booleans.
 
 `Table::insert(string, Value)` appends and returns false on an existing key. `find`
@@ -121,14 +122,16 @@ statement   = path hws "=" hws value
 path        = key { hws "." hws key }
 key         = bare-key | basic-string
 bare-key    = ("A".."Z" | "a".."z" | "0".."9" | "_" | "-")+
-value       = scalar | array
+value       = scalar | array | inline-table
 scalar      = basic-string | ml-basic-string | integer | decimal | "true" | "false"
 ml-basic-string = '"""' [line-ending] { ml-char | escape | line-ending-backslash } '"""'
                   (one or two quotes may stand right before the closing three)
 integer     = ["+" | "-"] unsigned-int
 unsigned-int = "0" | ("1".."9") { ["_"] ("0".."9") }
 decimal     = ["+" | "-"] unsigned-int "." digit { ["_"] digit }     (1 to 9 digits after the point)
-array       = "[" aws [scalar {aws "," aws scalar} [aws ","]] aws "]"
+array       = "[" aws [item {aws "," aws item} [aws ","]] aws "]"
+item        = scalar | inline-table              (every item of one array: the same scalar type, or inline tables)
+inline-table = "{" hws [path hws "=" hws value {hws "," hws path hws "=" hws value}] hws "}"
 ```
 
 Bare keys are nonempty; quoted keys may be empty. All-numeric bare keys are still
@@ -176,6 +179,40 @@ Repeated `[[a.b]]` headers append elements. Any nested header through an array o
 attaches to its latest element, and each element has its own table-definition state.
 Duplicate keys are errors even when their quoted and bare spellings differ.
 
+## Inline tables
+
+`key = { k = v, k2 = v2 }` is an inline table, as in TOML 1.0. Its keys may be quoted or
+dotted, and its values may be anything a value may be, other inline tables included. It
+sits on one line: a line ending or a comment between the braces is `UnterminatedInlineTable`
+at that point, unless it is inside a value that allows one (a multi-line string, an array),
+and EOF before the closing brace is `UnterminatedInlineTable` at EOF. Pairs are separated by
+commas with no trailing comma, so `{ x = 1, }` is `ExpectedKey` at the brace; anything else
+where a comma or the closing brace belongs is `ExpectedInlineTableSeparator`. Its keys
+follow the same duplicate and dotted-key rules as a table's.
+
+An inline table is a **value**. It defines all its keys at once and is closed afterwards:
+a dotted key through it, a `[header]` for it or for a table inside it, and a `[[header]]`
+under it are `TableValueConflict` at the key component that names it, as they are for any
+value. Assigning its key again is `DuplicateKey`. A table that headers or dotted keys built
+cannot be assigned an inline table: `TableValueConflict`, as before.
+
+**Arrays of inline tables.** `rows = [{ f = 100 }, { f = 200 }]` is an array whose items are
+all tables. The one-type-per-array rule reads "table" as that type: a scalar among tables,
+or a table among scalars, is `MixedArray` at the item, and nested arrays stay refused. It
+parses to `Tables`, the same data as `[[rows]]` headers would give, so an application reads
+it one way whatever the spelling. Like any value it is closed: `[[rows]]` after it, or a
+header through it, is `TableValueConflict`. The array may span lines and hold comments, as
+any array may; each table in it is on one line.
+
+**Depth and entries.** An inline table's keys continue its key's path, so the 16-component
+limit counts them: `a = { b = { c = 1 } }` reaches depth 3. The tables of an array of inline
+tables are one level below the array's key, as under `[[a]]`. Every key counts as one entry
+and every table of an array of inline tables as one more, exactly as headers count them,
+and each is counted when it is inserted into the tree: an inline table's contents while it
+is read, its own key after it, and an array's key after all its tables. So a document with
+one entry too many through the tables of an array reports `EntryLimit` at the array's key.
+The parser recurses once per nested inline table, which the depth limit bounds.
+
 ## Exact decimals
 
 `Decimal { int64_t mantissa; uint8_t scale; bool negativeZero; }` represents
@@ -217,7 +254,7 @@ NaN and the writer refuses them. No floating-to-integer cast occurs before range
 | One decoded key | 256 UTF-8 bytes | `KeyLimit` at the character or escape that exceeds the limit |
 | One decoded string | 65536 UTF-8 bytes | `StringLimit` at the character or escape that exceeds the limit |
 | One scalar array | 65536 items | `ArrayLimit` at the next item |
-| Total entries | 65536 | `EntryLimit` at the responsible key component |
+| Total entries | 65536 | `EntryLimit` at the responsible key component, or at the `{` of an array's table |
 
 Every key/value entry counts once, including implicit tables and array-of-tables
 containers; each array-of-tables element counts once additionally. Scalar array items
@@ -269,7 +306,7 @@ validation follows a complete successful syntax parse.
 | `DepthLimit` | Absolute path too deep |
 | `ExpectedEquals` | Missing `=` after a key path |
 | `ExpectedValue` | Missing scalar/value |
-| `UnsupportedValue` | Unsupported value introducer, including literal string, inline table or nested array |
+| `UnsupportedValue` | Unsupported value introducer, including literal string or nested array |
 | `UnterminatedString` | EOF or raw line ending before closing quote |
 | `StringLimit` | Decoded string too long |
 | `InvalidEscape` | Unknown escape letter; points at the letter |
@@ -280,7 +317,7 @@ validation follows a complete successful syntax parse.
 | `DecimalRange` | Decimal mantissa outside ±2^53 |
 | `ExpectedArraySeparator` | Expected comma or closing bracket |
 | `UnterminatedArray` | EOF before closing array bracket |
-| `MixedArray` | Scalar alternative differs from the first element |
+| `MixedArray` | Item type (a scalar alternative, or table) differs from the first item |
 | `ArrayLimit` | Too many array items |
 | `ExpectedHeaderEnd` | Missing closing header bracket(s) |
 | `TrailingCharacters` | Content after a completed statement on the same line |
@@ -288,9 +325,11 @@ validation follows a complete successful syntax parse.
 | `RedefinedTable` | Plain table defined more than once |
 | `TableValueConflict` | Table, array-of-tables or scalar used in an incompatible role |
 | `EntryLimit` | Too many entries/elements in the document |
+| `UnterminatedInlineTable` | EOF, a line ending or a comment before an inline table's closing brace |
+| `ExpectedInlineTableSeparator` | Expected a comma or the closing brace after a pair in an inline table |
 
 Unsupported syntax is an error, never an ignored setting or a partial successful tree.
-In particular, literal and multiline strings, nested/mixed arrays, inline tables,
+In particular, literal strings, multi-line literal strings, nested/mixed arrays,
 hex/octal/binary integers, exponents, infinities, NaNs, dates and times are
 unsupported. Depending on the point where a spelling leaves this grammar, the code may
 be `UnsupportedValue`, `InvalidNumber`, `TrailingCharacters` or another specific syntax
@@ -300,12 +339,42 @@ returns the code and position; it does not own that UI or perform migration.
 
 ## Canonical writing
 
-`[[nodiscard]] std::string write(const Table&)` emits scalar/array entries first,
-then plain subtables, then arrays of tables. Insertion order within each group is
+`[[nodiscard]] std::string write(const Table&)` emits `key = value` lines first, then
+plain subtables, then arrays of tables. Insertion order within each group is
 preserved. Each array-of-tables element is emitted together with all its children
 before the next element. Headers use full paths. Scalars always use plain keys under
 the correct current header, with `key = value` spacing. Arrays use `[a, b]` on one line.
 Empty plain tables produce headers; the empty root produces an empty string.
+
+**Inline or headers.** `Table::style` decides how a table is spelled where TOML leaves the
+choice: `Style::Header` (the default) under a `[header]` of its own, or `Style::Inline` as
+`{ ... }` on its key's line, among the `key = value` lines in insertion order. The parser
+marks every table it read in braces inline and every other table header, so a document
+keeps the shape its author gave it: a hand-written file where each row of a table is one
+inline line gets those lines back after a load and a save, and a program that builds a
+tree chooses its own shape. Writing everything with headers would have been simpler, but
+it turns a ten-row table of one-line rows into forty lines of headers, and a save should
+not reformat a file a person keeps by hand. The style is formatting, not data: it takes no
+part in equality, like positions.
+
+An array of tables is inline when every table in it has `Style::Inline`, and is written
+with `[[headers]]` otherwise. An inline table is `{ k = v, k2 = v2 }` with a space inside
+each brace, `{}` when empty, in entry order. Everything inside an inline table is inline,
+whatever its own style: a table as `{ ... }`, an array of tables as `[{ ... }, { ... }]`.
+An array of inline tables that is the whole value of a `key = value` line puts each table on
+a line of its own, indented by four spaces and followed by a comma, and the closing bracket
+on a line of its own, so each row diffs as one line:
+
+```toml
+rows = [
+    { f = 100, gain = -1.5 },
+    { f = 1000, gain = 0.0 },
+]
+```
+
+Inside an inline table the same array stays on one line. Dotted keys inside an inline
+table are written as the nested inline tables they are: `{ d.e = 2 }` becomes
+`{ d = { e = 2 } }`.
 
 Non-bare keys are basic quoted strings. Strings retain UTF-8 and raw tabs, escape
 quotes/backslashes, use the short escapes for backspace, LF, form feed and CR, and
@@ -323,7 +392,7 @@ caller-built trees (including invalid UTF-8, invalid decimals, duplicate-free bu
 oversized tables, nested/mixed scalar arrays, or empty `Tables`). `write` returns an
 empty string on the same refusal; use `writeChecked` when the empty-root distinction
 matters. Construction does not silently clamp or repair data. Empty `Array{}` is
-representable as `[]`; empty `Tables{}` is not representable by table headers.
+representable as `[]`; empty `Tables{}` is not representable: an empty array is `Array{}`.
 
 ## Verification
 

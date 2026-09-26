@@ -1,0 +1,29 @@
+{
+  "rows": [
+    {
+      "f": {"type": "integer", "value": "100"},
+      "gain": {"type": "decimal", "value": "-1.5"}
+    },
+    {
+      "f": {"type": "integer", "value": "1000"},
+      "gain": {"type": "decimal", "value": "0.0"}
+    }
+  ],
+  "compact": [
+    {
+      "a": {"type": "integer", "value": "1"}
+    },
+    {
+      "a": {"type": "integer", "value": "2"}
+    }
+  ],
+  "nested": [
+    {
+      "b": [
+        {
+          "c": {"type": "integer", "value": "1"}
+        }
+      ]
+    }
+  ]
+}

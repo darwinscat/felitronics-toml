@@ -1,0 +1,4 @@
+a = {}
+b = { x = 1, y = "s", z = [1, 2], t = { u = true } }
+c = { "quoted key" = 1, d = { e = 2, f = -0.50 } }
+g = { s = "line\nline", h = [1, 2] }

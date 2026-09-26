@@ -1,0 +1,6 @@
+rows = [
+  { f = 100, gain = -1.5 },
+	{ f = 1_000, gain = 0.0 }, # a comment
+]
+compact = [{a=1},{a=2}]
+nested = [{ b = [{ c = 1 }] }]

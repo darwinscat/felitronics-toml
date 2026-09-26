@@ -30,6 +30,10 @@ inline std::string decimalInteger (std::uint64_t n)
 inline const std::string ukraina = "\u0423\u043A\u0440\u0430\u0457\u043D\u0430";   // "Ukraina": 7 code points, 14 bytes
 inline const std::string klyuch = "\u043A\u043B\u044E\u0447";                       // "klyuch" (key)
 inline const std::string kyiv = "\u041A\u0438\u0457\u0432";                         // "Kyiv"
+// More scripts for the corpus generator, kept here so tools/ stays ASCII: CJK, Arabic (right to left), a 4-byte emoji.
+inline const std::string nihongo = "日本語";
+inline const std::string arabiyya = "العربية";
+inline const std::string smile = "😀";
 
 // Latin-1, Greek, Armenian, Cyrillic, CJK, Arabic (right to left), a combining acute, 4-byte emoji, every control.
 inline std::string specialString (Generator& g)
@@ -63,6 +67,32 @@ inline Table generated (Generator& g, unsigned depth = 0)
         }
         put (t, "versions", std::move (a));
         put (t, "second.table", Table{});
+        // An inline table, and inside it a table and an array of tables that are inline because it is.
+        Table row;
+        put (row, "gain", Decimal { -125, 2 });
+        put (row, "name", specialString (g));
+        Table inner;
+        put (inner, "on", true);
+        put (row, "inner", std::move (inner));
+        Tables cells (2);
+        put (cells[0], "n", std::int64_t (1));
+        put (cells[1], "", "second");
+        put (row, "cells", std::move (cells));
+        put (row, "list", Array { Value (std::int64_t (3)), Value (std::int64_t (-4)) });
+        row.style = Table::Style::Inline;
+        put (t, "inline", std::move (row));
+        // An array of inline tables: one row per line.
+        Tables rows;
+        for (unsigned i = 0, n = 1 + unsigned (g.next() % 3); i < n; ++i)
+        {
+            Table r;
+            put (r, "index", std::int64_t (i));
+            put (r, "text", specialString (g));
+            r.style = Table::Style::Inline;
+            rows.push_back (std::move (r));
+        }
+        put (t, "rows", std::move (rows));
+        put (t, "empty inline", [] { Table e; e.style = Table::Style::Inline; return e; }());
     }
     put (t, "", specialString (g));
     put (t, "key\n\"\\é\t", "plain");

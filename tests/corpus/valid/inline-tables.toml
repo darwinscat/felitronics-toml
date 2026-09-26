@@ -1,0 +1,8 @@
+a = {}
+b = { x = 1, y = "s", z = [1, 2], t = { u = true } }
+c = { "quoted key" = 1, d.e = 2, d.f = -0.50 }
+g = {s="""line
+line""",h=[
+1, # a comment
+2,
+]}  # a multi-line value inside is fine

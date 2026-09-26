@@ -109,7 +109,7 @@ void sweep (std::string_view document, const Table& root, std::uint32_t source)
             else if (const auto* t = std::get_if<Table> (&v.data))
             {
                 ok (t->position == v.position, "table and value positions agree");
-                ok (c == '[' || v.position == e.keyPosition, "table");
+                ok (c == (t->style == Table::Style::Inline ? '{' : '[') || v.position == e.keyPosition, "table");
                 stack.push_back ({ t, path + "." + e.key });
             }
             else if (const auto* ts = std::get_if<Tables> (&v.data))
@@ -117,7 +117,8 @@ void sweep (std::string_view document, const Table& root, std::uint32_t source)
                 ok (c == '[', "array of tables");
                 for (const auto& element : *ts)
                 {
-                    if (fine && document.substr (fixtures::offsetOf (document, element.position), 2) != "[[")
+                    const auto spelled = document.substr (fixtures::offsetOf (document, element.position), 2);
+                    if (fine && ! (element.style == Table::Style::Inline ? spelled[0] == '{' : spelled == "[["))
                     { fine = false; why = path + "." + e.key + ": element at " + text (element.position); }
                     stack.push_back ({ &element, path + "." + e.key + "[]" });
                 }
@@ -176,6 +177,21 @@ int main()
         at (root, { { fixtures::ukraina } }, { 3, 1, 0 }, { 3, 13, 0 }, "after a Cyrillic key");
         at (root, { { "😀" } }, { 4, 1, 0 }, { 4, 7, 0 }, "after an emoji key");
         at (root, { { "😀" }, { "", 1, true } }, {}, { 4, 13, 0 }, "after a two-byte character in an item");
+    }
+
+    {
+        // Inline tables are at their brace, their keys and values where written, arrays of them at their bracket.
+        const auto root = parsed ("t = { a = 1, b.c = \"x\", d = { e = true } }\nrows = [\n  { f = 1 },\n\t{ f = 2 },\n]\n");
+        at (root, { { "t" } }, { 1, 1, 0 }, { 1, 5, 0 }, "an inline table");
+        at (root, { { "t" }, { "a" } }, { 1, 7, 0 }, { 1, 11, 0 }, "a value inside it");
+        at (root, { { "t" }, { "b" } }, { 1, 14, 0 }, { 1, 14, 0 }, "a dotted table inside it");
+        at (root, { { "t" }, { "b" }, { "c" } }, { 1, 16, 0 }, { 1, 20, 0 }, "a value under the dotted key");
+        at (root, { { "t" }, { "d" } }, { 1, 25, 0 }, { 1, 29, 0 }, "a nested inline table");
+        at (root, { { "t" }, { "d" }, { "e" } }, { 1, 31, 0 }, { 1, 35, 0 }, "a value in the nested table");
+        const auto* rows = std::get_if<Tables> (&root.find ("rows")->data);
+        test::ok (root.find ("rows")->position == Position { 2, 8, 0 }, "an array of inline tables is at its [");
+        test::ok (rows && (*rows)[0].position == Position { 3, 3, 0 } && (*rows)[1].position == Position { 4, 2, 0 }
+                  && (*rows)[1].find ("f")->position == Position { 4, 8, 0 }, "each element at its {, after spaces or a tab");
     }
 
     test::group ("positions are not part of equality, and caller-built values have none");

@@ -1,0 +1,20 @@
+[
+  {"path": [], "at": [1, 1]},
+  {"path": ["rows"], "key": [1, 1], "at": [1, 8]},
+  {"path": ["rows", 0], "at": [2, 3]},
+  {"path": ["rows", 0, "f"], "key": [2, 5], "at": [2, 9]},
+  {"path": ["rows", 0, "gain"], "key": [2, 14], "at": [2, 21]},
+  {"path": ["rows", 1], "at": [3, 2]},
+  {"path": ["rows", 1, "f"], "key": [3, 4], "at": [3, 8]},
+  {"path": ["rows", 1, "gain"], "key": [3, 15], "at": [3, 22]},
+  {"path": ["compact"], "key": [5, 1], "at": [5, 11]},
+  {"path": ["compact", 0], "at": [5, 12]},
+  {"path": ["compact", 0, "a"], "key": [5, 13], "at": [5, 15]},
+  {"path": ["compact", 1], "at": [5, 18]},
+  {"path": ["compact", 1, "a"], "key": [5, 19], "at": [5, 21]},
+  {"path": ["nested"], "key": [6, 1], "at": [6, 10]},
+  {"path": ["nested", 0], "at": [6, 11]},
+  {"path": ["nested", 0, "b"], "key": [6, 13], "at": [6, 17]},
+  {"path": ["nested", 0, "b", 0], "at": [6, 18]},
+  {"path": ["nested", 0, "b", 0, "c"], "key": [6, 20], "at": [6, 24]}
+]
