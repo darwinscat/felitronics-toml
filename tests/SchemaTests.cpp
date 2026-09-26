@@ -172,8 +172,8 @@ int main()
                   && asDecimal (Value (std::int64_t (-900719925474099))) == Decimal { -9007199254740990, 1 }, "the largest that fit");
         test::ok (! asDecimal (Value (std::int64_t (900719925474100))) && ! asDecimal (Value (std::numeric_limits<std::int64_t>::min())),
                   "one more does not");
-        test::ok (asDecimal (Value (Decimal { 125, 3 })) == Decimal { 125, 3 } && ! asDecimal (Value (true)) && ! asDecimal (Value ("1")),
-                  "a decimal is itself; other types are none");
+        test::ok (asDecimal (Value (Decimal { 125, 3 })) == Decimal { 125, 3 } && ! asDecimal (Value (Decimal { 1, 0 }))
+                  && ! asDecimal (Value (true)) && ! asDecimal (Value ("1")), "a valid decimal is itself; invalid decimals and other types are none");
         const auto doc = parsed ("a = 900719925474100\nb = [1, 2]\nc = 7\nd = true\n");
         Decimal a;
         std::vector<Decimal> b;
@@ -251,14 +251,16 @@ int main()
 
     test::group ("the caller's own checks, with its own codes");
     {
-        const auto doc = parsed ("mode = \"loud\"\n[t]\n");
+        const auto doc = parsed ("mode = \"loud\"\nraw = 1\n[t]\n");
         const auto r = read (doc, [] (Reader& in)
         {
             std::string mode;
             if (in.required ("mode", mode) && mode != "soft") in.refuse ("mode", 42);
+            in.refuse ("raw", 7);
             in.table ("t", Need::Required, [] (Reader& t) { t.refuse ("absent", 3); });
         });
-        problems (r, "Refused mode 1:8 #42\nRefused t.absent 2:1 #3\n", "at the value, or at the table when the key is absent");
+        problems (r, "Refused mode 1:8 #42\nRefused raw 2:7 #7\nRefused t.absent 3:1 #3\n",
+                  "at the value, or at the table when the key is absent; a refused key is known");
         test::ok (std::string_view (faultName (Fault::Refused)) == "Refused" && std::string_view (faultName (Fault (99))) == "Unknown",
                   "stable fault names");
     }

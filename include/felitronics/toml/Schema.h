@@ -72,7 +72,7 @@ template <class T> struct Range
 // document spelling n.0 would give. That holds while |n| <= 900719925474099 (2^53 / 10); beyond it, nullopt.
 [[nodiscard]] inline std::optional<Decimal> asDecimal (const Value& value) noexcept
 {
-    if (const auto* d = std::get_if<Decimal> (&value.data)) return *d;
+    if (const auto* d = std::get_if<Decimal> (&value.data)) return d->valid() ? std::optional<Decimal> (*d) : std::nullopt;
     if (const auto* n = std::get_if<std::int64_t> (&value.data))
     {
         constexpr std::int64_t limit = Decimal::kMaxMantissa / 10;
@@ -233,8 +233,9 @@ public:
     // absent), with the caller's code in Problem::detail.
     void refuse (std::string_view key, std::uint32_t detail = 0)
     {
-        const Value* v = table_.find (key);
-        problem (Fault::Refused, pathOf (key), v ? v->position : table_.position, detail);
+        const Entry* e = table_.entry (key);
+        if (e != nullptr) used_[std::size_t (e - table_.entries().data())] = true;
+        problem (Fault::Refused, pathOf (key), e ? e->value.position : table_.position, detail);
     }
     // UnknownKey, with options.unknownKeys as its severity, for every key nothing read, in entry order. Once.
     void finish()

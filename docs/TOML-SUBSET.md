@@ -11,7 +11,7 @@ I/O, not a streaming or real-time API. It does not preserve comments. Store vers
 and other information that must survive a save as string values; comments remain useful for
 hand-edited or pasted input.
 
-Three optional headers build on it, each depending only on `Toml.h`:
+Two optional headers and one function build on it, each depending only on `Toml.h`:
 `<felitronics/toml/Schema.h>` reads fields into an application's structs with types,
 ranges and defaults, and reports keys nobody read; `<felitronics/toml/Embedded.h>` walks a
 document that `felitronics_toml2cpp` compiled into the program as `constexpr` data; and
@@ -443,7 +443,9 @@ equals `0.0`, and `12.000000001` is above `12.0`. A decimal bound that is not a 
 
 **Integers where a decimal is expected.** The parser keeps integers and decimals apart;
 this layer accepts an integer for a `Decimal` or `double` field, losslessly: `n` reads as
-`n.0`, mantissa `n * 10` at scale 1, the very value a document spelling `n.0` gives. Scale
+`n.0`, mantissa `n * 10` at scale 1, the very value a document spelling `n.0` gives. A
+manually constructed invalid `Decimal` is `OutOfRange`, and `asDecimal(value)` returns
+empty for it. Scale
 1 is the smallest scale a `Decimal` has, so nothing is invented. That holds while
 `|n| <= 900719925474099` (2^53 / 10); a larger integer is `OutOfRange`. `-0` is integer 0
 and reads as `0.0`. `asDecimal(value)` applies the same rule to a single `Value`.
