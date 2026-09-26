@@ -1,0 +1,13 @@
+{
+  "a": {"type": "string", "value": "line one\u000aline two"},
+  "b": {"type": "string", "value": "one line"},
+  "c": {"type": "string", "value": "one two"},
+  "d": {"type": "string", "value": "a\"b\"\"c"},
+  "e": {"type": "string", "value": "x\""},
+  "f": {"type": "string", "value": "x\"\""},
+  "g": {"type": "string", "value": ""},
+  "h": {"type": "string", "value": "\""},
+  "i": {"type": "string", "value": "\u0009é\u0009# not a comment\\"},
+  "j": [{"type": "string", "value": "x\u000ay"}, {"type": "string", "value": "z"}],
+  "k": {"type": "string", "value": ""}
+}

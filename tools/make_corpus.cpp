@@ -207,7 +207,15 @@ int main (int argc, char** argv)
     invalid ("underscore-in-array-item", "a=[1_0, 2__0]", Code::InvalidNumber, 1, 9);
     invalid ("nested-array", "a=[[0]]", Code::UnsupportedValue, 1, 4);
     invalid ("inline-table", "a={}", Code::UnsupportedValue, 1, 3);
-    invalid ("multiline-string", "a=\"\"\"x\"\"\"", Code::TrailingCharacters, 1, 5);
+    invalid ("multiline-unterminated", "a=\"\"\"x", Code::UnterminatedString, 1, 7);
+    invalid ("multiline-unterminated-after-line", "a=\"\"\"x\n", Code::UnterminatedString, 2, 1);
+    invalid ("multiline-six-closing-quotes", "a=\"\"\"x\"\"\"\"\"\"", Code::TrailingCharacters, 1, 12);
+    invalid ("multiline-backslash-before-text", "a=\"\"\"a\\ b\"\"\"", Code::InvalidEscape, 1, 8);
+    invalid ("multiline-backslash-before-eof", "a=\"\"\"a\\  ", Code::InvalidEscape, 1, 8);
+    invalid ("multiline-unknown-escape", "a=\"\"\"\n\\q\"\"\"", Code::InvalidEscape, 2, 2);
+    invalid ("multiline-bare-cr", "a=\"\"\"x\ry\"\"\"", Code::BareCarriageReturn, 1, 7);
+    invalid ("multiline-control", "a=\"\"\"\n\x01\"\"\"", Code::InvalidControl, 2, 1);
+    invalid ("multiline-key", "\"\"\"a\"\"\" = 1", Code::ExpectedEquals, 1, 3);
     invalid ("string-raw-newline", "a=\"x\ny\"", Code::UnterminatedString, 1, 5);
     invalid ("unicode-escape-surrogate", "a=\"\\uD800\"", Code::InvalidUnicodeEscape, 1, 4);
     invalid ("unicode-escape-above-10ffff", "a=\"\\U00110000\"", Code::InvalidUnicodeEscape, 1, 4);
@@ -233,6 +241,9 @@ int main (int argc, char** argv)
     invalid ("limit-quoted-key", "\"" + std::string (kMaxKey + 1, 'a') + "\"=0", Code::KeyLimit, 1, 258);
     valid ("limit-string", "a=\"" + std::string (kMaxString, 'x') + "\"");
     invalid ("limit-string", "a=\"" + std::string (kMaxString + 1, 'x') + "\"", Code::StringLimit, 1, 65540);
+    // The one or two quotes right before the closing three are content, and count.
+    valid ("limit-multiline-string", "a=\"\"\"" + std::string (kMaxString - 2, 'x') + "\"\"\"\"\"");
+    invalid ("limit-multiline-string", "a=\"\"\"" + std::string (kMaxString - 1, 'x') + "\"\"\"\"\"", Code::StringLimit, 1, 65542);
     std::string array = "a=[";
     for (std::size_t i = 0; i < kMaxArray; ++i) array += "0,";
     valid ("limit-array", array + "]");
@@ -331,6 +342,19 @@ int main (int argc, char** argv)
     valid ("decimal-signed-zero-and-scale", "a=[-0.0,0.00,-1.000]");
     valid ("bool-array", "a=[true,false]");
     valid ("utf8-string-array", "a=[\"\xC3\xA9\",\"\xF0\x9F\x98\x80\"]");
+    valid ("multiline-strings", "a = \"\"\"\nline one\nline two\"\"\"\n"
+                                "b = \"\"\"one line\"\"\"\n"
+                                "c = \"\"\"one \\\n    two\"\"\"\n"
+                                "d = \"\"\"a\"b\"\"c\"\"\"\n"
+                                "e = \"\"\"x\"\"\"\"\n"
+                                "f = \"\"\"x\"\"\"\"\"\n"
+                                "g = \"\"\"\"\"\"\n"
+                                "h = \"\"\"\"\"\"\"\n"
+                                "i = \"\"\"\\t\\u00E9\t# not a comment\\\\\"\"\"  # a comment\n"
+                                "j = [\"\"\"x\ny\"\"\", \"z\"]\n"
+                                "k = \"\"\"\n\"\"\"\n");
+    valid ("multiline-crlf-and-line-ending-backslash", "a = \"\"\"\r\nx\r\ny\r\n\"\"\"\r\nb = \"\"\"a\\ \t\r\n\r\n \t b\"\"\"\r\n");
+    valid ("multiline-written-back", "a = \"say \\\"hi\\\"\\n\\\"\\\"x\\\"\\t\\\\\\r\\n\"\nb = [\"a\\nb\"]\n\n[t]\nc = \"\\n\"\n");
     valid ("underscores", "a = 48_000\nb = 1_000.000_1\nc = -9_223_372_036_854_775_808\nd = 9_007_199.254_740_992\ne = +1_0\n"
                           "f = [1_0, -2_0]\n");
     valid ("empty-tables", "[a]\n[b]\n");

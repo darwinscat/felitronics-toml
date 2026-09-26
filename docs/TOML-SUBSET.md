@@ -106,7 +106,7 @@ A leading UTF-8 BOM is refused. Space and tab are the only horizontal whitespace
 Blank lines and `#` comments through end of line are accepted, including trailing
 comments and comments between array elements. A `#` inside a string is data.
 Raw NUL, DEL, and C0 controls other than tab and line endings are errors everywhere,
-including comments; CR must be followed by LF. Strings cannot contain raw line endings.
+including comments; CR must be followed by LF. Only multi-line strings contain raw line endings.
 Valid non-ASCII Unicode scalars are allowed in strings, quoted keys and comments.
 Unicode is preserved without normalization. U+FEFF inside a string or comment is data.
 
@@ -122,7 +122,9 @@ path        = key { hws "." hws key }
 key         = bare-key | basic-string
 bare-key    = ("A".."Z" | "a".."z" | "0".."9" | "_" | "-")+
 value       = scalar | array
-scalar      = basic-string | integer | decimal | "true" | "false"
+scalar      = basic-string | ml-basic-string | integer | decimal | "true" | "false"
+ml-basic-string = '"""' [line-ending] { ml-char | escape | line-ending-backslash } '"""'
+                  (one or two quotes may stand right before the closing three)
 integer     = ["+" | "-"] unsigned-int
 unsigned-int = "0" | ("1".."9") { ["_"] ("0".."9") }
 decimal     = ["+" | "-"] unsigned-int "." digit { ["_"] digit }     (1 to 9 digits after the point)
@@ -137,6 +139,19 @@ Hex digits in escapes may be upper or lower case. Unicode escapes must name scal
 values (0 through U+10FFFF except U+D800–U+DFFF); surrogate pairs are not accepted.
 Escaped NUL/control characters are valid string/key data. Raw tab is also valid.
 All lengths below count decoded UTF-8 bytes, not Unicode characters or escape spelling.
+
+A **multi-line basic string** opens and closes with three quotes, as in TOML 1.0. A line
+ending right after the opening quotes is dropped. Raw line endings inside are content,
+and each CRLF reads as LF, so a checkout that converts line endings cannot change a value
+on another platform. A backslash that is the last thing on a line before its line ending,
+save spaces and tabs, drops itself and every space, tab and line ending after it, up to
+the next other character or the closing quotes; a backslash followed by whitespace that
+does not reach a line ending is `InvalidEscape` at the character after the backslash.
+Otherwise the escapes, the raw tab and the refused controls are those of a basic string.
+One or two quotes may appear anywhere inside, including right before the closing three:
+`"""x""""` is `x"`, and a sixth quote in a row is left over, so it ends the value. A
+multi-line string is a value, never a key, and counts against the same 64 KiB. EOF before
+the closing quotes is `UnterminatedString` at EOF.
 
 An underscore may separate two digits, as in TOML: `48_000`, `1_000.000_1`. Each one
 stands between two digits of the same part, so `1__0`, `_1`, `1_`, `1_.5`, `1._5` and
@@ -294,7 +309,12 @@ Empty plain tables produce headers; the empty root produces an empty string.
 
 Non-bare keys are basic quoted strings. Strings retain UTF-8 and raw tabs, escape
 quotes/backslashes, use the short escapes for backspace, LF, form feed and CR, and
-uppercase `\u00XX` for other forbidden raw controls. Decimals retain their scale and
+uppercase `\u00XX` for other forbidden raw controls. A string that is the whole value of
+a `key = value` line and contains a line feed is written as a multi-line string instead:
+the opening quotes after `= `, a line feed, the text with a raw line feed for each `\n`,
+and the closing quotes right after the last character. A quote in it stays raw unless
+another quote or the closing quotes follow it, when it is `\"`; everything else is
+escaped as in a one-line string, CR included. Strings in arrays stay on one line. Decimals retain their scale and
 negative zero. All line endings are LF, every emitted statement ends with LF, and one
 blank line separates tables. There are no comments or leading blank lines.
 

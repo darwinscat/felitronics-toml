@@ -1,0 +1,16 @@
+a = """
+line one
+line two"""
+b = """one line"""
+c = """one \
+    two"""
+d = """a"b""c"""
+e = """x""""
+f = """x"""""
+g = """"""
+h = """""""
+i = """\t\u00E9	# not a comment\\"""  # a comment
+j = ["""x
+y""", "z"]
+k = """
+"""

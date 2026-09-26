@@ -118,7 +118,6 @@ int main()
     }
     error ("a=[[0]]", Code::UnsupportedValue, 1, 4);
     error ("a={}", Code::UnsupportedValue, 1, 3);
-    error ("a=\"\"\"x\"\"\"", Code::TrailingCharacters, 1, 5);
     error ("a=\"x\ny\"", Code::UnterminatedString, 1, 5);
     error ("a=\"\\uD800\"", Code::InvalidUnicodeEscape, 1, 4);
     error ("a=\"\\U00110000\"", Code::InvalidUnicodeEscape, 1, 4);
@@ -129,6 +128,52 @@ int main()
     error ("a=[,]", Code::ExpectedValue, 1, 4);
     error ("a=[1,,]", Code::ExpectedValue, 1, 6);
     error ("[[a]", Code::ExpectedHeaderEnd, 1, 5);
+
+    test::group ("multi-line basic strings: the first line ending dropped, CRLF as LF, line-ending backslashes, quotes");
+    {
+        const auto read = [] (std::string_view document, const std::string& expected, const char* what)
+        {
+            const auto result = parse (document);
+            const auto* root = std::get_if<Table> (&result);
+            const auto* s = root && root->find ("a") ? std::get_if<std::string> (&root->find ("a")->data) : nullptr;
+            test::ok (s && *s == expected, what);
+            if (root) accepted (document);
+        };
+        read ("a = \"\"\"\nline one\nline two\"\"\"", "line one\nline two", "the line ending after the quotes is dropped");
+        read ("a = \"\"\"\n\nx\"\"\"", "\nx", "only the first one");
+        read ("a = \"\"\"one line\"\"\"", "one line", "on one line");
+        read ("a = \"\"\"\r\nx\r\ny\r\n\"\"\"", "x\ny\n", "CRLF reads as LF, so a checkout's line endings cannot change a value");
+        read ("a = \"\"\"one \\\n    two\"\"\"", "one two", "a line-ending backslash drops the line ending and the indent");
+        read ("a = \"\"\"a\\ \t\r\n\n \t\n  b\"\"\"", "ab", "spaces after the backslash, blank lines and CRLF too");
+        read ("a = \"\"\"\\\n\"\"\"", "", "up to the closing quotes");
+        read ("a = \"\"\"a\"b\"\"c\"\"\"", "a\"b\"\"c", "one or two quotes inside");
+        read ("a = \"\"\"x\"\"\"\"", "x\"", "a quote right before the closing three");
+        read ("a = \"\"\"x\"\"\"\"\"", "x\"\"", "two quotes right before the closing three");
+        read ("a = \"\"\"\"\"\"", "", "empty");
+        read ("a = \"\"\"\"\"\"\"", "\"", "one quote");
+        read ("a = \"\"\"\\t\\u00E9\t#\\\\\"\"\"", "\t\u00E9\t#\\", "escapes, a raw tab, a hash");
+        read ("a = \"\"\"x\ny\"\"\" # a comment", "x\ny", "a comment after the closing quotes");
+        read ("a = \"\"\"" + std::string (kMaxString - 2, 'x') + "\"\"\"\"\"", std::string (kMaxString - 2, 'x') + "\"\"",
+              "the quotes before the closing three meet the limit");
+        accepted ("a = [\"\"\"x\ny\"\"\", \"z\"]\nb = \"\"\"\n\"\"\"");
+        // Written back: a statement's string with a line feed on several lines, everything else on one.
+        Table t;
+        setUp (t.insert ("text", Value ("say \"hi\"\n\"\"x\"\ttab\\\r\n")));
+        setUp (t.insert ("list", Value (Array { Value ("a\nb") })));
+        setUp (t.insert ("plain", Value ("no line feed")));
+        test::ok (write (t) == "text = \"\"\"\nsay \"hi\"\n\\\"\"x\"\ttab\\\\\\r\n\"\"\"\nlist = [\"a\\nb\"]\nplain = \"no line feed\"\n",
+                  "the multi-line spelling, and the one-line spelling in an array");
+    }
+    error ("a = \"\"\"x", Code::UnterminatedString, 1, 9);
+    error ("a = \"\"\"x\n", Code::UnterminatedString, 2, 1);
+    error ("a = \"\"\"x\"\"\"\"\"\"", Code::TrailingCharacters, 1, 14);
+    error ("a = \"\"\"a\\ b\"\"\"", Code::InvalidEscape, 1, 10);
+    error ("a = \"\"\"a\\  ", Code::InvalidEscape, 1, 10);
+    error ("a = \"\"\"\\q\"\"\"", Code::InvalidEscape, 1, 9);
+    error ("a = \"\"\"x\ry\"\"\"", Code::BareCarriageReturn, 1, 9);
+    error ("a = \"\"\"\n\x01\"\"\"", Code::InvalidControl, 2, 1);
+    error ("\"\"\"a\"\"\" = 1", Code::ExpectedEquals, 1, 3);
+    error ("a = \"\"\"" + std::string (kMaxString - 1, 'x') + "\"\"\"\"\"", Code::StringLimit, 1, std::uint32_t (8 + kMaxString));
 
     test::group ("underscores: each one between two digits, gone from the value and from the canonical text");
     {

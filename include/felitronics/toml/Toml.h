@@ -483,19 +483,60 @@ private:
         if (atEnd() || peek() == '\n' || (peek() == '\r' && pos_ + 1 < text_.size() && text_[pos_ + 1] == '\n')) return true;
         fail (Code::TrailingCharacters, pos_); return false;
     }
+    [[nodiscard]] bool lineEndAt (std::size_t p) const noexcept
+    {
+        return p < end_ && (text_[p] == '\n' || (text_[p] == '\r' && p + 1 < end_ && text_[p + 1] == '\n'));
+    }
+    // A basic string, or with three quotes a multi-line basic string (never a key): a line ending right after the
+    // opening quotes is dropped, CRLF inside reads as LF, a backslash that ends a line drops every space, tab and
+    // line ending after it, and one or two quotes may stand right before the closing three.
     [[nodiscard]] std::string string (bool key)
     {
         std::string out;
-        ++pos_;
+        const std::size_t limit = key ? kMaxKey : kMaxString;
+        const bool multiline = ! key && text_.substr (pos_, 3) == "\"\"\"" && pos_ + 3 <= end_;
+        pos_ += multiline ? 3 : 1;
+        if (multiline && lineEndAt (pos_)) pos_ += text_[pos_] == '\r' ? 2u : 1u;
         while (! atEnd() && ! failed_)
         {
             const auto start = pos_;
             char c = text_[pos_++];
-            if (c == '"') return out;
-            if (c == '\n' || c == '\r') { fail (Code::UnterminatedString, start); break; }
-            if (c == '\\')
+            if (c == '"')
+            {
+                if (! multiline) return out;
+                std::size_t run = 1;
+                while (run < 5 && start + run < end_ && text_[start + run] == '"') ++run;
+                if (run >= 3)
+                {
+                    for (std::size_t q = 0; q + 3 < run && ! failed_; ++q)
+                    {
+                        out += '"';
+                        if (out.size() > limit) fail (Code::StringLimit, start + q);
+                    }
+                    pos_ = start + run;
+                    if (! failed_) return out;
+                    break;
+                }
+                out += '"';
+            }
+            else if (c == '\n' || c == '\r')
+            {
+                if (! multiline) { fail (Code::UnterminatedString, start); break; }
+                if (c == '\r') ++pos_;       // scanEncoding guarantees the LF
+                out += '\n';
+            }
+            else if (c == '\\')
             {
                 if (atEnd()) { fail (Code::UnterminatedString, pos_); break; }
+                if (multiline && (peek() == ' ' || peek() == '\t' || peek() == '\n' || peek() == '\r'))
+                {
+                    auto p = pos_;
+                    while (p < end_ && (text_[p] == ' ' || text_[p] == '\t')) ++p;
+                    if (! lineEndAt (p)) { fail (Code::InvalidEscape, pos_); break; }
+                    while (p < end_ && (text_[p] == ' ' || text_[p] == '\t' || lineEndAt (p))) p += text_[p] == '\r' ? 2u : 1u;
+                    pos_ = p;
+                    continue;
+                }
                 c = text_[pos_++];
                 switch (c)
                 {
@@ -534,7 +575,7 @@ private:
                 out.append (text_.substr (start, n));
                 pos_ = start + n;
             }
-            if (out.size() > (key ? kMaxKey : kMaxString)) fail (key ? Code::KeyLimit : Code::StringLimit, start);
+            if (out.size() > limit) fail (key ? Code::KeyLimit : Code::StringLimit, start);
         }
         if (! failed_) fail (Code::UnterminatedString, pos_);
         return out;
@@ -776,33 +817,48 @@ inline void unsignedText (std::string& out, std::uint64_t n)
     }
     return true;
 }
+// One byte of a basic string's content, escaped where it must be.
+inline void escaped (std::string& out, char c)
+{
+    switch (c)
+    {
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\b': out += "\\b"; break;
+        case '\n': out += "\\n"; break;
+        case '\f': out += "\\f"; break;
+        case '\r': out += "\\r"; break;
+        default:
+        {
+            const auto u = static_cast<unsigned char> (c);
+            if ((u < 0x20 && u != '\t') || u == 0x7F)
+            {
+                out += "\\u00";
+                out += "0123456789ABCDEF"[u >> 4]; out += "0123456789ABCDEF"[u & 15u];
+            }
+            else out += c;
+            break;
+        }
+    }
+}
 inline void quoted (std::string& out, std::string_view s)
 {
     out += '"';
-    for (const char c : s)
-    {
-        switch (c)
-        {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\b': out += "\\b"; break;
-            case '\n': out += "\\n"; break;
-            case '\f': out += "\\f"; break;
-            case '\r': out += "\\r"; break;
-            default:
-            {
-                const auto u = static_cast<unsigned char> (c);
-                if ((u < 0x20 && u != '\t') || u == 0x7F)
-                {
-                    out += "\\u00";
-                    out += "0123456789ABCDEF"[u >> 4]; out += "0123456789ABCDEF"[u & 15u];
-                }
-                else out += c;
-                break;
-            }
-        }
-    }
+    for (const char c : s) escaped (out, c);
     out += '"';
+}
+// The multi-line spelling: the opening quotes on the key's line, the text from the next line on, a raw LF for
+// each line feed. A quote stays raw unless another quote or the closing delimiter follows it, so no run of
+// quotes can close the string early. Everything else is escaped as in a one-line string.
+inline void multilineQuoted (std::string& out, std::string_view s)
+{
+    out += "\"\"\"\n";
+    for (std::size_t i = 0; i < s.size(); ++i)
+    {
+        if (s[i] == '\n' || (s[i] == '"' && i + 1 < s.size() && s[i + 1] != '"')) out += s[i];
+        else escaped (out, s[i]);
+    }
+    out += "\"\"\"";
 }
 inline void keyText (std::string& out, std::string_view key)
 {
@@ -825,12 +881,13 @@ private:
     bool failed_ = false;
     void bound() { if (out_.size() > kMaxDocument) failed_ = true; }
     void count() { if (++entries_ > kMaxEntries) failed_ = true; }
-    void scalar (const Value& value)
+    void scalar (const Value& value, bool statement)
     {
         if (const auto* s = std::get_if<std::string> (&value.data))
         {
             if (! validString (*s, kMaxString)) { failed_ = true; return; }
-            quoted (out_, *s);
+            if (statement && s->find ('\n') != std::string::npos) multilineQuoted (out_, *s);
+            else quoted (out_, *s);
         }
         else if (const auto* n = std::get_if<std::int64_t> (&value.data))
         {
@@ -855,7 +912,9 @@ private:
         else failed_ = true;
         bound();
     }
-    void value (const Value& v)
+    // statement: the value is the whole right-hand side of a key = value line, where a string with a line feed
+    // is spelled on several lines. Array items stay on one line.
+    void value (const Value& v, bool statement)
     {
         if (const auto* a = std::get_if<Array> (&v.data))
         {
@@ -865,11 +924,11 @@ private:
             {
                 if ((*a)[i].data.index() != a->front().data.index()) { failed_ = true; return; }
                 if (i != 0) out_ += ", ";
-                scalar ((*a)[i]);
+                scalar ((*a)[i], false);
             }
             out_ += ']';
         }
-        else scalar (v);
+        else scalar (v, statement);
     }
     void heading (const std::string& path, bool array)
     {
@@ -890,7 +949,7 @@ private:
             if (failed_) return;
             if (e.value.data.index() < 5)
             {
-                keyText (out_, e.key); out_ += " = "; value (e.value); out_ += '\n'; bound();
+                keyText (out_, e.key); out_ += " = "; value (e.value, true); out_ += '\n'; bound();
                 if (failed_) return;
             }
         }
