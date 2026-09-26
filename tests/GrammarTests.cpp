@@ -84,6 +84,8 @@ int main()
     error ("=\n\x80", Code::ExpectedKey, 1, 1);
     error ("a=\"\x80\"\na=1", Code::InvalidUtf8, 1, 4);
     error ("a=\"é\" x", Code::TrailingCharacters, 1, 7);
+    // A bare value is one token: running into an invalid byte gives that byte's error, not the digits' own.
+    error ("a=0.0000000000\x80", Code::InvalidUtf8, 1, 15);
 
     test::group ("columns count code points: every script, a combining mark, a tab, limits crossed by multi-byte text");
     for (const auto& c : fixtures::codePointColumns()) error (c.text, c.code, c.line, c.column);

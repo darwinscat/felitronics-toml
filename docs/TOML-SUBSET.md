@@ -191,6 +191,10 @@ line once and its CR is the last column of its line. End of input is one column 
 last character. Only one error is returned.
 A document-size error precedes parsing. Otherwise the parser stops at the first lexical
 or syntax failure; an invalid encoding/control byte takes precedence at the same position.
+A bare value (a number or a boolean) is judged as one whole token: when it runs into an
+invalid encoding/control byte, that byte's error is the result, even if the characters
+before it are already out of range (`a=0.0000000000` followed by byte 0x80 is
+`InvalidUtf8` at 1:15, not `DecimalScale` at 1:14).
 Numeric range/format failures point to the token's start; a tenth decimal fractional
 digit points to that digit. Duplicate/conflict errors point to the offending key
 component; a repeated table header points to its final component. Canonical-size

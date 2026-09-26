@@ -60,7 +60,7 @@ mappings. Order is pinned by the canonical text instead. Strings are raw UTF-8 i
 
 | Family | Documents |
 |---|---:|
-| One minimal witness for each of the 30 error codes | 27 invalid |
+| One minimal witness for each of the 30 error codes, and which error wins when two compete | 28 invalid |
 | Table ownership: redefinition, dotted keys against headers, tables against values and arrays of tables | 10 invalid |
 | TOML 1.0 values outside the subset, and malformed numbers, strings and arrays | 33 invalid |
 | Every resource limit, at the limit and at limit + 1, also met and crossed by multi-byte characters | 13 valid, 14 invalid |
@@ -72,13 +72,13 @@ mappings. Order is pinned by the canonical text instead. Strings are raw UTF-8 i
 | Accepted grammar: comments, CRLF, quoted and dotted keys, headers, arrays of tables, edges of every type, and non-ASCII text in values, quoted keys, headers and comments | 27 valid |
 | Generated: the first 16 of the 512 documents the property suite generates, and its depth-16 tree | 17 valid |
 
-57 valid documents (38 of them with a separate canonical text) and 365 invalid ones, 17.7 MB on disk (0.8 MB
+57 valid documents (38 of them with a separate canonical text) and 366 invalid ones, 17.7 MB on disk (0.8 MB
 compressed): a document at the 1 MiB limit is, by nature, a megabyte. Non-ASCII text is deliberate
 throughout: Latin-1, Greek, Armenian, Cyrillic, CJK, Arabic, combining marks and emoji, in string values,
 quoted keys, table headers and comments.
 
 Python's `tomllib`, an independent TOML 1.0 reader, reads all 57 valid documents and all 38 canonical texts as
-the expected trees (`python3 tools/python-roundtrip.py --corpus tests/corpus`). It also rejects 331 of the 365
+the expected trees (`python3 tools/python-roundtrip.py --corpus tests/corpus`). It also rejects 332 of the 366
 invalid documents. The other 34 are valid TOML 1.0 that this subset refuses on purpose: its resource limits,
 literal and multiline strings, inline tables, nested and mixed arrays, hexadecimal, octal and binary integers,
 exponents, underscores, `inf`/`nan`, dates and times, integers beyond int64 and decimals beyond its precision.

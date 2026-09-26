@@ -163,6 +163,7 @@ int main (int argc, char** argv)
     invalid ("syntax-error-before-invalid-utf8", "=\n\x80", Code::ExpectedKey, 1, 1);
     invalid ("invalid-utf8-before-duplicate-key", "a=\"\x80\"\na=1", Code::InvalidUtf8, 1, 4);
     invalid ("trailing-after-utf8-string", "a=\"\xC3\xA9\" x", Code::TrailingCharacters, 1, 7);
+    invalid ("bare-value-runs-into-invalid-utf8", "a=0.0000000000\x80", Code::InvalidUtf8, 1, 15);
     for (const auto& c : fixtures::codePointColumns()) invalid (c.name, c.text, c.code, c.line, c.column);
 
     // --- table ownership ---------------------------------------------------------------------------------------
