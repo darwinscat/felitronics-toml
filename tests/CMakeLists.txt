@@ -116,6 +116,8 @@ set_tests_properties(felitronics_toml2cpp_names_the_position PROPERTIES
     PASS_REGULAR_EXPRESSION "inline-trailing-comma\\.toml:1:8: error: ExpectedKey")
 add_test(NAME felitronics_toml2cpp_checks_names COMMAND felitronics_toml2cpp in.toml out.h "not a namespace" name)
 set_tests_properties(felitronics_toml2cpp_checks_names PROPERTIES WILL_FAIL TRUE)
+add_test(NAME felitronics_toml2cpp_refuses_cpp_keywords COMMAND felitronics_toml2cpp in.toml out.h ns class)
+set_tests_properties(felitronics_toml2cpp_refuses_cpp_keywords PROPERTIES WILL_FAIL TRUE)
 
 # The README example, run twice: as written, and with exceptions and RTTI switched off.
 felitronics_toml_test(felitronics_toml_example Example.cpp)

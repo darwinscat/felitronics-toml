@@ -560,7 +560,7 @@ The embedding suite embeds every valid document of the corpus and compares each 
 
 ## Verification
 
-Eight ctest suites, the README example and three checks of the tool cover the contract. The
+Eight ctest suites, the README example and four checks of the tool cover the contract. The
 grammar suite asserts every error code with its exact position, every limit at the limit
 and one past it, and hostile bytes in every context. The decimal suite checks 90000 seeded
 rationals and every edge against an oracle that uses integer binary long division and
