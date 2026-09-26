@@ -10,6 +10,7 @@ the same trees, the same canonical bytes, and the same error codes at the same p
 valid/<name>.toml              a document the subset accepts
 valid/<name>.json              the tree it must parse to
 valid/<name>.canonical.toml    what write() must produce, when that differs from <name>.toml
+valid/<name>.positions.json    where every value and key was written (documents under 64 KiB)
 invalid/<name>.toml            a document the subset refuses
 invalid/<name>.json            {"code": "<Code>", "line": N, "column": M}, the only acceptable refusal
 ```
@@ -28,6 +29,11 @@ invalid/<name>.json            {"code": "<Code>", "line": N, "column": M}, the o
    column each, a tab is one, a combining mark is one of its own. On bytes: every byte that is not a UTF-8
    continuation byte (`10xxxxxx`) starts a column. End of input is one column past the last character. Only
    the first error is reported.
+4. **Positions.** When `<name>.positions.json` exists, it lists the position of every value in the parsed tree,
+   depth first: the root, then each entry of a table in its order (its key, then its value's contents), each
+   array item and each array-of-tables element. Each record is `{"path": [...], "key": [line, column], "at":
+   [line, column]}`; the path holds keys and item indexes, and items and elements have no `"key"`. Lines and
+   columns count as in rule 3; `docs/TOML-SUBSET.md` says where each kind of value is.
 
 ## Tree encoding
 

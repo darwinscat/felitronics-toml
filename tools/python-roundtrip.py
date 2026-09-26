@@ -62,15 +62,62 @@ def compare_tagged(actual, expected, path):
             compare_tagged(item, child, f"{path}[{i}]")
 
 
+def character_at(lines, position, name):
+    """The character at a 1-based line and a 1-based column counted in code points (Python indexes code points)."""
+    line, column = position
+    assert 1 <= line <= len(lines) and 1 <= column <= len(lines[line - 1]) + 1, (name, position)
+    text = lines[line - 1]
+    return text[column - 1] if column <= len(text) else "\n"
+
+
+def check_positions(document, text, positions):
+    """Each position must point at what its value starts with, found here without any C++: a quote for a string,
+    a digit or sign for a number, t or f for a boolean, [ for an array, [ or { for a table (or its key, for a table
+    only a dotted or header path implies), and the bare or quoted spelling for a key."""
+    lines = text.split("\n")
+    for entry in positions:
+        path, at = entry["path"], entry["at"]
+        value = document
+        for component in path:
+            value = value[component]
+        if not path:
+            assert at == [1, 1], (path, at)
+            continue
+        c = character_at(lines, at, path)
+        if type(value) is str:
+            ok = c == '"'
+        elif type(value) in (int, float):
+            ok = c.isdigit() or c in "+-"
+        elif type(value) is bool:
+            ok = c == ("t" if value else "f")
+        elif type(value) is list:
+            ok = c == "["
+        else:
+            ok = c in "[{" or at == entry.get("key")
+        assert ok, (path, at, c)
+        if "key" in entry:
+            key = entry["key"]
+            k = character_at(lines, key, path)
+            spelled = lines[key[0] - 1][key[1] - 1:]
+            assert k == '"' or spelled.startswith(path[-1]), (path, key, spelled[:20])
+        else:
+            assert isinstance(path[-1], int), path
+
+
 def check_corpus(root):
     valid = sorted(p for p in (root / "valid").glob("*.toml") if not p.name.endswith(".canonical.toml"))
-    texts = 0
+    texts = positioned = 0
     for document in valid:
         expected = json.loads(document.with_suffix(".json").read_bytes().decode("utf-8"))
         for path in (document, document.with_name(document.stem + ".canonical.toml")):
             if path.exists():
                 compare_tagged(tomllib.loads(path.read_bytes().decode("utf-8")), expected, path.name)
                 texts += 1
+        positions = document.with_name(document.stem + ".positions.json")
+        if positions.exists():
+            text = document.read_bytes().decode("utf-8")
+            check_positions(tomllib.loads(text), text, json.loads(positions.read_bytes().decode("utf-8")))
+            positioned += 1
     invalid = sorted((root / "invalid").glob("*.toml"))
     rejected = 0
     for path in invalid:
@@ -80,7 +127,8 @@ def check_corpus(root):
             rejected += 1
     assert valid and invalid, "no corpus documents found"
     print(f"tomllib: {len(valid)} valid corpus documents ({texts} texts with their canonical forms) match their "
-          f"expected trees; {len(invalid)} invalid documents, {rejected} of which tomllib rejects too")
+          f"expected trees, and {positioned} positions files point at their values; {len(invalid)} invalid documents, "
+          f"{rejected} of which tomllib rejects too")
 
 
 def main():

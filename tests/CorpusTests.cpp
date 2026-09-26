@@ -8,6 +8,7 @@
 //   invalid/<name>.toml  is refused with exactly the code, line and column in <name>.json.
 #include <felitronics/toml/Toml.h>
 #include "toml_test.h"
+#include "Fixtures.h"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -302,7 +303,12 @@ std::string treeDiffers (const ParseResult& result, const Json& expected)
     return tableDiffers (*std::get_if<Table> (&result), expected, "root");
 }
 
-// The stems of <dir>/*.toml, without the .canonical.toml companions, sorted for a stable report.
+bool endsWith (std::string_view s, std::string_view tail)
+{
+    return s.size() >= tail.size() && s.substr (s.size() - tail.size()) == tail;
+}
+// The stems of <dir>/*.toml, without the .canonical.toml companions, sorted for a stable report. jsonFiles counts
+// the <stem>.json files, not the .positions.json companions.
 std::vector<std::string> documents (const fs::path& dir, std::size_t& jsonFiles)
 {
     std::vector<std::string> names;
@@ -313,13 +319,48 @@ std::vector<std::string> documents (const fs::path& dir, std::size_t& jsonFiles)
         const auto dot = file.rfind ('.');
         if (dot == std::string::npos) continue;
         const auto stem = file.substr (0, dot), extension = file.substr (dot);
-        if (extension == ".json") ++jsonFiles;
-        const std::string_view companion = ".canonical";
-        if (extension == ".toml" && ! (stem.size() >= companion.size() && stem.compare (stem.size() - companion.size(), companion.size(), companion) == 0))
-            names.push_back (stem);
+        if (extension == ".json" && ! endsWith (stem, ".positions")) ++jsonFiles;
+        if (extension == ".toml" && ! endsWith (stem, ".canonical")) names.push_back (stem);
     }
     std::sort (names.begin(), names.end());
     return names;
+}
+// Empty when the positions file lists exactly the tree's positions, in its depth-first order.
+std::string positionsDiffer (const Table& tree, const Json& expected)
+{
+    const auto actual = fixtures::locate (tree);
+    if (expected.kind != Json::Kind::Array) return "not a JSON array";
+    if (expected.items.size() != actual.size())
+        return unsignedText (actual.size()) + " positions, expected " + unsignedText (expected.items.size());
+    const auto pair = [] (const Json* j, std::uint32_t& line, std::uint32_t& column)
+    {
+        if (j == nullptr || j->kind != Json::Kind::Array || j->items.size() != 2) return false;
+        for (const auto* n : { &j->items[0], &j->items[1] })
+            if (n->kind != Json::Kind::Number || n->text.empty() || n->text.size() > 9 || n->text.find_first_not_of ("0123456789") != std::string::npos) return false;
+        line = std::uint32_t (std::stoul (j->items[0].text)); column = std::uint32_t (std::stoul (j->items[1].text));
+        return true;
+    };
+    for (std::size_t i = 0; i < actual.size(); ++i)
+    {
+        const auto& e = expected.items[i];
+        const auto* path = e.member ("path");
+        if (e.kind != Json::Kind::Object || path == nullptr || path->kind != Json::Kind::Array) return "entry " + unsignedText (i) + " has no path";
+        std::string spelled = "[";
+        for (const auto& component : path->items)
+            spelled += (spelled.size() == 1 ? "" : ", ") + (component.kind == Json::Kind::String ? fixtures::jsonString (component.text) : component.text);
+        spelled += "]";
+        const auto where = spelled + ": ";
+        if (spelled != actual[i].path) return where + "expected here, the tree has " + actual[i].path;
+        std::uint32_t line = 0, column = 0;
+        if (! pair (e.member ("at"), line, column) || Position { line, column } != actual[i].at)
+            return where + "at " + unsignedText (actual[i].at.line) + ":" + unsignedText (actual[i].at.column);
+        const auto* key = e.member ("key");
+        if ((key != nullptr) != actual[i].keyed) return where + (actual[i].keyed ? "missing key position" : "an item has no key");
+        if (key && (! pair (key, line, column) || Position { line, column } != actual[i].key))
+            return where + "key at " + unsignedText (actual[i].key.line) + ":" + unsignedText (actual[i].key.column);
+        if (e.keys.size() != (key ? 3u : 2u)) return where + "unexpected members";
+    }
+    return {};
 }
 }
 
@@ -329,7 +370,7 @@ int main (int argc, char** argv)
     const fs::path corpus = argv[1];
 
     test::group ("valid: the expected tree, the canonical text byte for byte, and the canonical text's tree");
-    std::size_t jsonFiles = 0;
+    std::size_t jsonFiles = 0, positioned = 0;
     const auto valid = documents (corpus / "valid", jsonFiles);
     for (const auto& name : valid)
     {
@@ -345,6 +386,13 @@ int main (int argc, char** argv)
         const auto& canonical = canonicalFile ? *canonicalFile : *text;
         test::ok (tree != nullptr && writeChecked (*tree) == canonical, "valid/" + name + ": write() differs from the canonical text");
         if (canonicalFile) test::ok (treeDiffers (parse (canonical), *expected).empty(), "valid/" + name + ": the canonical text's tree differs");
+        if (const auto positions = readJson (base.string() + ".positions.json"); positions && tree)
+        {
+            ++positioned;
+            const auto differs = positionsDiffer (*tree, *positions);
+            test::ok (differs.empty(), "valid/" + name + ".positions.json: " + differs);
+        }
+        else test::ok (! fs::exists (base.string() + ".positions.json"), "valid/" + name + ".positions.json: unreadable");
     }
     test::ok (jsonFiles == valid.size(), "valid/: every .json belongs to a .toml");
 
@@ -374,6 +422,7 @@ int main (int argc, char** argv)
     test::ok (jsonFiles == invalid.size(), "invalid/: every .json belongs to a .toml");
     test::ok (! valid.empty() && ! invalid.empty(), "the corpus was found and is not empty");
 
-    std::printf ("corpus: %s valid and %s invalid documents\n", unsignedText (valid.size()).c_str(), unsignedText (invalid.size()).c_str());
+    std::printf ("corpus: %s valid documents (%s with positions) and %s invalid documents\n", unsignedText (valid.size()).c_str(),
+                 unsignedText (positioned).c_str(), unsignedText (invalid.size()).c_str());
     return test::report();
 }

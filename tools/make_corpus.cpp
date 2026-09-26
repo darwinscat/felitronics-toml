@@ -96,6 +96,10 @@ void valid (const std::string& name, std::string_view text)
     const auto canonical = write (*root);
     if (canonical != text) save (dir / (name + ".canonical.toml"), canonical);
     else fs::remove (dir / (name + ".canonical.toml")); // a reseed must not leave a stale companion
+    // Where every value and key was written. The megabyte limit documents would add megabytes of positions
+    // and nothing new, so documents from 64 KiB up have none.
+    if (text.size() < 65536) save (dir / (name + ".positions.json"), fixtures::positionsJson (*root));
+    else fs::remove (dir / (name + ".positions.json"));
     ++validCount;
 }
 void invalid (const std::string& name, std::string_view text, Code code, std::uint32_t line, std::uint32_t column)

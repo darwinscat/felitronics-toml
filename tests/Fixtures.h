@@ -132,6 +132,57 @@ inline std::vector<std::pair<const char*, std::string>> unicodeDocuments()
         { "limit-quoted-key-four-byte-character", "\"" + std::string (kMaxKey - 4, 'a') + "😀\"=0" },
         { "limit-string-two-byte-character", "a=\"" + std::string (kMaxString - 2, 'x') + "é\"" } };
 }
+// Every position in a tree, depth first in entry order: the root, then each entry (its key and its value), each
+// array item and each array-of-tables element. The path is a JSON array of keys and item indexes.
+struct Located { std::string path; bool keyed; Position key, at; };
+inline std::string jsonString (std::string_view s);
+inline void locate (std::vector<Located>& out, const Table& table, const std::string& path)
+{
+    const auto join = [] (const std::string& p, const std::string& component)
+    { return p.size() == 2 ? "[" + component + "]" : p.substr (0, p.size() - 1) + ", " + component + "]"; };
+    for (const auto& e : table.entries())
+    {
+        const auto at = join (path, jsonString (e.key));
+        out.push_back ({ at, true, e.keyPosition, e.value.position });
+        if (const auto* a = std::get_if<Array> (&e.value.data))
+            for (std::size_t i = 0; i < a->size(); ++i) out.push_back ({ join (at, decimalInteger (i)), false, {}, (*a)[i].position });
+        else if (const auto* t = std::get_if<Table> (&e.value.data)) locate (out, *t, at);
+        else if (const auto* ts = std::get_if<Tables> (&e.value.data))
+            for (std::size_t i = 0; i < ts->size(); ++i)
+            {
+                const auto element = join (at, decimalInteger (i));
+                out.push_back ({ element, false, {}, (*ts)[i].position });
+                locate (out, (*ts)[i], element);
+            }
+    }
+}
+inline std::vector<Located> locate (const Table& root)
+{
+    std::vector<Located> out { { "[]", false, {}, root.position } };
+    locate (out, root, "[]");
+    return out;
+}
+inline std::string positionsJson (const Table& root)
+{
+    const auto pair = [] (Position p) { return "[" + decimalInteger (p.line) + ", " + decimalInteger (p.column) + "]"; };
+    std::string out = "[\n";
+    const auto all = locate (root);
+    for (std::size_t i = 0; i < all.size(); ++i)
+        out += "  {\"path\": " + all[i].path + (all[i].keyed ? ", \"key\": " + pair (all[i].key) : "") + ", \"at\": "
+             + pair (all[i].at) + (i + 1 == all.size() ? "}\n" : "},\n");
+    return out + "]\n";
+}
+// The byte offset of a position, found without the parser: count lines, then code points within the line.
+inline std::size_t offsetOf (std::string_view text, Position p)
+{
+    std::size_t i = 0;
+    for (std::uint32_t line = 1; line < p.line && i < text.size(); ++i)
+        if (text[i] == '\n') ++line;
+    for (std::uint32_t column = 1; i < text.size(); ++i)
+        if ((static_cast<unsigned char> (text[i]) & 0xC0u) != 0x80u && column++ == p.column) break;
+    return i;
+}
+
 // This serializer is test-only and independently spells JSON. Decimal expectations carry exact binary64
 // bits, so Python checks negative zero and rounding as well as TOML type, tree shape and string contents.
 inline std::string jsonString (std::string_view s)

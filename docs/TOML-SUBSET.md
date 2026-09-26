@@ -65,6 +65,40 @@ order is observable separately through `entries()` and `write()`: it is not part
 TOML's mapping value. This distinction is necessary because the writer groups scalars,
 plain tables and arrays of tables, even when callers inserted those groups interleaved.
 
+## Positions
+
+Every parsed value, key and table remembers where it was written, so an application can
+report its own semantic errors ("this gain is out of range") at the right spot, in the
+same coordinates as `Error`: a 1-based line and a 1-based column counted in code points.
+
+```cpp
+struct Position { std::uint32_t line, column, source; };   // Value::position, Table::position,
+                                                            // Entry::keyPosition
+auto result = parse (text, 2);                              // every Position gets source 2
+```
+
+- A **value** is at its first character: the opening quote of a string, the first digit
+  or sign of a number, the `t` or `f` of a boolean, the `[` of an array. An array item is
+  at its own first character.
+- A **key** (`Entry::keyPosition`) is at the first character of its bare or quoted
+  spelling, where the entry was first written. For a dotted path, each component's entry
+  is at that component.
+- A **table** defined by a header is at the header's `[`. A table that a dotted key or a
+  longer header only implies is at the key component that first named it; when a header
+  later defines it, it moves to that header. An array of tables is at its first `[[`, and
+  each element at its own `[[`. A `Value` holding a table has the table's position.
+- The **root** of a parsed document is at 1:1.
+- `source` is the number passed to `parse(text, source)` (0 by default), copied into
+  every position of the tree, so values keep telling which document they came from after
+  `overlay()` merges trees.
+
+A value or table the caller builds has `Position{}`, line 0: not read from a document.
+`Table::insert(key, value, keyPosition)` takes an optional key position, and
+`Table::entry(key)` returns the whole entry, key position included. Positions never take
+part in equality: the same document parsed with other spacing, or from another source,
+is equal. Locating costs nothing extra in complexity: the parser moves one cursor forward
+through the text, so all the positions of a document take O(size) together.
+
 ## Accepted text
 
 Text is UTF-8, with LF or CRLF line endings, optionally ending without a newline.
