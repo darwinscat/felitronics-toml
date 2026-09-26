@@ -124,8 +124,8 @@ bare-key    = ("A".."Z" | "a".."z" | "0".."9" | "_" | "-")+
 value       = scalar | array
 scalar      = basic-string | integer | decimal | "true" | "false"
 integer     = ["+" | "-"] unsigned-int
-unsigned-int = "0" | ("1".."9") { "0".."9" }
-decimal     = ["+" | "-"] unsigned-int "." ("0".."9"){1,9}
+unsigned-int = "0" | ("1".."9") { ["_"] ("0".."9") }
+decimal     = ["+" | "-"] unsigned-int "." digit { ["_"] digit }     (1 to 9 digits after the point)
 array       = "[" aws [scalar {aws "," aws scalar} [aws ","]] aws "]"
 ```
 
@@ -137,6 +137,13 @@ Hex digits in escapes may be upper or lower case. Unicode escapes must name scal
 values (0 through U+10FFFF except U+D800–U+DFFF); surrogate pairs are not accepted.
 Escaped NUL/control characters are valid string/key data. Raw tab is also valid.
 All lengths below count decoded UTF-8 bytes, not Unicode characters or escape spelling.
+
+An underscore may separate two digits, as in TOML: `48_000`, `1_000.000_1`. Each one
+stands between two digits of the same part, so `1__0`, `_1`, `1_`, `1_.5`, `1._5` and
+`+_1` are `InvalidNumber` (`_1` has no number introducer and is `UnsupportedValue`).
+Underscores are spelling only: they never change a value, they do not count as digits
+for the nine-digit scale or the leading-zero rule (`0_1` is a leading zero), and the
+writer never emits them.
 
 Integers must fit signed int64, including -9223372036854775808 and 9223372036854775807.
 Integer `-0` becomes integer zero. Leading zeros are forbidden in both integer and
@@ -269,7 +276,7 @@ validation follows a complete successful syntax parse.
 
 Unsupported syntax is an error, never an ignored setting or a partial successful tree.
 In particular, literal and multiline strings, nested/mixed arrays, inline tables,
-hex/octal/binary integers, underscores, exponents, infinities, NaNs, dates and times are
+hex/octal/binary integers, exponents, infinities, NaNs, dates and times are
 unsupported. Depending on the point where a spelling leaves this grammar, the code may
 be `UnsupportedValue`, `InvalidNumber`, `TrailingCharacters` or another specific syntax
 code above. An application should display its own localized explanation and the error

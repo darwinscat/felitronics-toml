@@ -584,30 +584,40 @@ private:
         std::size_t p = 0;
         const bool negative = token[p] == '-';
         if (token[p] == '-' || token[p] == '+') ++p;
-        const auto wholeStart = p;
-        while (p < token.size() && digit (token[p])) ++p;
-        if (p == wholeStart || (p - wholeStart > 1 && token[wholeStart] == '0'))
-        { fail (Code::InvalidNumber, start); return {}; }
-        const auto wholeEnd = p;
+        // Digits, each underscore between two of them (TOML's rule). The digits are collected without them.
+        std::string digits;
+        const auto run = [&] (bool fraction, std::uint8_t& scale)
+        {
+            for (const auto first = p; p < token.size() && (digit (token[p]) || token[p] == '_'); ++p)
+            {
+                if (token[p] == '_')
+                {
+                    if (p == first || ! digit (token[p - 1]) || p + 1 == token.size() || ! digit (token[p + 1])) return false;
+                    continue;
+                }
+                if (fraction && scale == 9) { fail (Code::DecimalScale, start + p); return false; }
+                if (fraction) ++scale;
+                digits += token[p];
+            }
+            return true;
+        };
         std::uint8_t scale = 0;
+        if (! run (false, scale) || digits.empty() || (digits.size() > 1 && digits[0] == '0'))
+        { fail (Code::InvalidNumber, start); return {}; }
         if (p < token.size() && token[p] == '.')
         {
             ++p;
-            while (p < token.size() && digit (token[p]))
-            {
-                if (scale == 9) { fail (Code::DecimalScale, start + p); return {}; }
-                ++scale; ++p;
-            }
-            if (scale == 0) { fail (Code::InvalidNumber, start); return {}; }
+            const bool fine = run (true, scale);
+            if (failed_) return {};
+            if (! fine || scale == 0) { fail (Code::InvalidNumber, start); return {}; }
         }
         if (p != token.size()) { fail (Code::InvalidNumber, start); return {}; }
         const std::uint64_t limit = scale != 0 ? std::uint64_t (Decimal::kMaxMantissa)
             : std::uint64_t (std::numeric_limits<std::int64_t>::max()) + (negative ? 1u : 0u);
         std::uint64_t n = 0;
-        for (std::size_t i = wholeStart; i < token.size(); ++i)
+        for (const char c : digits)
         {
-            if (i == wholeEnd && scale != 0) continue;
-            const auto d = std::uint64_t (token[i] - '0');
+            const auto d = std::uint64_t (c - '0');
             if (n > (limit - d) / 10)
             { fail (scale != 0 ? Code::DecimalRange : Code::IntegerRange, start); return {}; }
             n = n * 10 + d;

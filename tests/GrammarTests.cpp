@@ -110,7 +110,7 @@ int main()
     error ("a=[]\n[[a]]", Code::TableValueConflict, 2, 3);
     error ("[a]\nx=1\nx=2", Code::DuplicateKey, 3, 1);
     error ("a=1\n\"a\"=2", Code::DuplicateKey, 2, 1);
-    for (const char* value : { "01", "-01", "+01", "01.1", "1.", ".1", "1e2", "1.0e2", "1_000", "0xff",
+    for (const char* value : { "01", "-01", "+01", "01.1", "1.", ".1", "1e2", "1.0e2", "0xff",
                                "0o77", "0b01", "+", "-", "True", "falsee", "inf", "nan", "1979-05-27", "12:00:00" })
     {
         const auto result = parse (std::string ("a=") + value);
@@ -129,6 +129,25 @@ int main()
     error ("a=[,]", Code::ExpectedValue, 1, 4);
     error ("a=[1,,]", Code::ExpectedValue, 1, 6);
     error ("[[a]", Code::ExpectedHeaderEnd, 1, 5);
+
+    test::group ("underscores: each one between two digits, gone from the value and from the canonical text");
+    {
+        const auto result = parse ("a = 48_000\nb = 1_000.000_1\nc = -9_223_372_036_854_775_808\nd = 9_007_199.254_740_992\ne = +1_0");
+        const auto* root = std::get_if<Table> (&result);
+        test::ok (root && std::get<std::int64_t> (root->find ("a")->data) == 48000, "48_000");
+        test::ok (root && std::get<Decimal> (root->find ("b")->data) == Decimal { 10000001, 4 }, "1_000.000_1");
+        test::ok (root && std::get<std::int64_t> (root->find ("c")->data) == std::numeric_limits<std::int64_t>::min(), "int64 minimum");
+        test::ok (root && std::get<Decimal> (root->find ("d")->data) == Decimal { Decimal::kMaxMantissa, 9 }, "the largest mantissa");
+        test::ok (root && write (*root) == "a = 48000\nb = 1000.0001\nc = -9223372036854775808\nd = 9007199.254740992\ne = 10\n",
+                  "the writer spells no underscores");
+    }
+    for (const char* value : { "1__000", "1000_", "+_1", "-_1", "1_.5", "1._5", "1.5_", "0_1", "0_0.1", "1_e2", "1_000_" })
+        error (std::string ("a=") + value, Code::InvalidNumber, 1, 3);
+    error ("a=_1", Code::UnsupportedValue, 1, 3);
+    error ("a=0.000_000_000_1", Code::DecimalScale, 1, 17);
+    error ("a=9_223_372_036_854_775_808", Code::IntegerRange, 1, 3);
+    error ("a=900_719_925_474_099.3", Code::DecimalRange, 1, 3);
+    error ("a=[1_0, 2__0]", Code::InvalidNumber, 1, 9);
 
     test::group ("each resource at the limit and at limit + 1");
     accepted (std::string (kMaxDocument, ' '));

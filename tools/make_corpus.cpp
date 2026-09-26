@@ -189,13 +189,22 @@ int main (int argc, char** argv)
         { "leading-zero-plus", "+01", Code::InvalidNumber }, { "leading-zero-decimal", "01.1", Code::InvalidNumber },
         { "decimal-without-fraction", "1.", Code::InvalidNumber }, { "decimal-without-integer", ".1", Code::UnsupportedValue },
         { "exponent", "1e2", Code::InvalidNumber }, { "decimal-exponent", "1.0e2", Code::InvalidNumber },
-        { "underscore", "1_000", Code::InvalidNumber }, { "hexadecimal", "0xff", Code::InvalidNumber },
+        { "hexadecimal", "0xff", Code::InvalidNumber },
         { "octal", "0o77", Code::InvalidNumber }, { "binary", "0b01", Code::InvalidNumber },
         { "sign-only-plus", "+", Code::InvalidNumber }, { "sign-only-minus", "-", Code::InvalidNumber },
         { "bool-capitalized", "True", Code::UnsupportedValue }, { "bool-trailing-letter", "falsee", Code::InvalidNumber },
         { "inf", "inf", Code::UnsupportedValue }, { "nan", "nan", Code::UnsupportedValue },
         { "local-date", "1979-05-27", Code::InvalidNumber }, { "local-time", "12:00:00", Code::InvalidNumber } };
     for (const auto& v : values) invalid (std::string ("value-") + v.name, std::string ("a=") + v.value, v.code, 1, 3);
+    for (const auto& [name, value] : { std::pair { "double", "1__000" }, std::pair { "trailing", "1000_" },
+            std::pair { "after-plus", "+_1" }, std::pair { "after-minus", "-_1" }, std::pair { "before-point", "1_.5" },
+            std::pair { "after-point", "1._5" }, std::pair { "trailing-fraction", "1.5_" }, std::pair { "leading-zero", "0_1" },
+            std::pair { "before-exponent", "1_e2" } })
+        invalid (std::string ("underscore-") + name, std::string ("a=") + value, Code::InvalidNumber, 1, 3);
+    invalid ("underscore-leading", "a=_1", Code::UnsupportedValue, 1, 3);
+    invalid ("underscore-tenth-fraction-digit", "a=0.000_000_000_1", Code::DecimalScale, 1, 17);
+    invalid ("underscore-above-int64", "a=9_223_372_036_854_775_808", Code::IntegerRange, 1, 3);
+    invalid ("underscore-in-array-item", "a=[1_0, 2__0]", Code::InvalidNumber, 1, 9);
     invalid ("nested-array", "a=[[0]]", Code::UnsupportedValue, 1, 4);
     invalid ("inline-table", "a={}", Code::UnsupportedValue, 1, 3);
     invalid ("multiline-string", "a=\"\"\"x\"\"\"", Code::TrailingCharacters, 1, 5);
@@ -322,6 +331,8 @@ int main (int argc, char** argv)
     valid ("decimal-signed-zero-and-scale", "a=[-0.0,0.00,-1.000]");
     valid ("bool-array", "a=[true,false]");
     valid ("utf8-string-array", "a=[\"\xC3\xA9\",\"\xF0\x9F\x98\x80\"]");
+    valid ("underscores", "a = 48_000\nb = 1_000.000_1\nc = -9_223_372_036_854_775_808\nd = 9_007_199.254_740_992\ne = +1_0\n"
+                          "f = [1_0, -2_0]\n");
     valid ("empty-tables", "[a]\n[b]\n");
     valid ("utf8-encoding-boundaries", "a=\"\xC2\x80\xDF\xBF\xE0\xA0\x80\xED\x9F\xBF\xEE\x80\x80\xF0\x90\x80\x80\xF4\x8F\xBF\xBF\"");
     for (const auto& [name, text] : fixtures::unicodeDocuments()) valid (name, text);
