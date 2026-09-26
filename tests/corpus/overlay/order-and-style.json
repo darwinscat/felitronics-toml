@@ -1,0 +1,13 @@
+{
+  "c": {"type": "integer", "value": "3"},
+  "t": {
+    "k": {"type": "integer", "value": "1"},
+    "m": {"type": "integer", "value": "2"}
+  },
+  "a": {"type": "integer", "value": "10"},
+  "h": {
+    "k": {"type": "integer", "value": "1"},
+    "n": {"type": "integer", "value": "2"}
+  },
+  "new": {"type": "bool", "value": "true"}
+}

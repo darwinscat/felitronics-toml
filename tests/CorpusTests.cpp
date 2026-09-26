@@ -340,6 +340,7 @@ std::string positionsDiffer (const Table& tree, const Json& expected)
         line = std::uint32_t (std::stoul (j->items[0].text)); column = std::uint32_t (std::stoul (j->items[1].text));
         return true;
     };
+    std::size_t sourced = 0;
     for (std::size_t i = 0; i < actual.size(); ++i)
     {
         const auto& e = expected.items[i];
@@ -352,14 +353,23 @@ std::string positionsDiffer (const Table& tree, const Json& expected)
         const auto where = spelled + ": ";
         if (spelled != actual[i].path) return where + "expected here, the tree has " + actual[i].path;
         std::uint32_t line = 0, column = 0;
-        if (! pair (e.member ("at"), line, column) || Position { line, column } != actual[i].at)
+        if (! pair (e.member ("at"), line, column) || line != actual[i].at.line || column != actual[i].at.column)
             return where + "at " + unsignedText (actual[i].at.line) + ":" + unsignedText (actual[i].at.column);
         const auto* key = e.member ("key");
         if ((key != nullptr) != actual[i].keyed) return where + (actual[i].keyed ? "missing key position" : "an item has no key");
-        if (key && (! pair (key, line, column) || Position { line, column } != actual[i].key))
+        if (key && (! pair (key, line, column) || line != actual[i].key.line || column != actual[i].key.column))
             return where + "key at " + unsignedText (actual[i].key.line) + ":" + unsignedText (actual[i].key.column);
-        if (e.keys.size() != (key ? 3u : 2u)) return where + "unexpected members";
+        // An overlay's positions also say which layer each value (and its key) came from.
+        if (const auto* source = e.member ("source"))
+        {
+            ++sourced;
+            if (source->kind != Json::Kind::Number || source->text != unsignedText (actual[i].at.source)
+                || (actual[i].keyed && actual[i].key.source != actual[i].at.source))
+                return where + "source " + unsignedText (actual[i].at.source);
+        }
+        if (e.keys.size() != (key ? 3u : 2u) + (e.member ("source") ? 1u : 0u)) return where + "unexpected members";
     }
+    if (sourced != 0 && sourced != actual.size()) return "a source on some entries only";
     return {};
 }
 }
@@ -422,7 +432,31 @@ int main (int argc, char** argv)
     test::ok (jsonFiles == invalid.size(), "invalid/: every .json belongs to a .toml");
     test::ok (! valid.empty() && ! invalid.empty(), "the corpus was found and is not empty");
 
-    std::printf ("corpus: %s valid documents (%s with positions) and %s invalid documents\n", unsignedText (valid.size()).c_str(),
-                 unsignedText (positioned).c_str(), unsignedText (invalid.size()).c_str());
+    test::group ("overlay: base (source 1) under top (source 2) gives the tree, the canonical text and the positions");
+    std::vector<std::string> layered;
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator (corpus / "overlay", ec))
+        if (const auto file = entry.path().filename().string(); endsWith (file, ".base.toml"))
+            layered.push_back (file.substr (0, file.size() - std::string_view (".base.toml").size()));
+    std::sort (layered.begin(), layered.end());
+    for (const auto& name : layered)
+    {
+        const auto base = (corpus / "overlay" / name).string();
+        const auto below = slurp (base + ".base.toml"), above = slurp (base + ".top.toml"), canonical = slurp (base + ".canonical.toml");
+        const auto expected = readJson (base + ".json"), positions = readJson (base + ".positions.json");
+        if (! below || ! above || ! canonical || ! expected || ! positions) { test::ok (false, "overlay/" + name + ": a file is missing"); continue; }
+        const auto b = parse (*below, 1), t = parse (*above, 2);
+        if (! std::holds_alternative<Table> (b) || ! std::holds_alternative<Table> (t)) { test::ok (false, "overlay/" + name + ": a layer is refused"); continue; }
+        const ParseResult merged = overlay (std::get<Table> (b), std::get<Table> (t));
+        const auto why = treeDiffers (merged, *expected);
+        test::ok (why.empty(), "overlay/" + name + ": " + why);
+        test::ok (writeChecked (std::get<Table> (merged)) == *canonical, "overlay/" + name + ": write() differs from the canonical text");
+        const auto differs = positionsDiffer (std::get<Table> (merged), *positions);
+        test::ok (differs.empty(), "overlay/" + name + ".positions.json: " + differs);
+    }
+    test::ok (! layered.empty(), "the overlay cases were found");
+
+    std::printf ("corpus: %s valid documents (%s with positions), %s invalid documents, %s overlays\n", unsignedText (valid.size()).c_str(),
+                 unsignedText (positioned).c_str(), unsignedText (invalid.size()).c_str(), unsignedText (layered.size()).c_str());
     return test::report();
 }

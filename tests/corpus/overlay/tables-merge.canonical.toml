@@ -1,0 +1,10 @@
+[limiter]
+ceiling = -2.0
+release = 0.050
+lookahead = 5
+
+[limiter.detector]
+mode = "rms"
+
+[eq]
+low = 0.0

@@ -1,0 +1,4 @@
+[limiter]
+ceiling = -2.0
+lookahead = 5
+detector.mode = "rms"

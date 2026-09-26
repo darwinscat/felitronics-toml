@@ -1,0 +1,9 @@
+{
+  "a": [{"type": "integer", "value": "9"}],
+  "rows": [],
+  "bands": [
+    {
+      "f": {"type": "integer", "value": "1000"}
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "a": {"type": "integer", "value": "1"},
+  "b": {"type": "string", "value": "y"},
+  "c": {"type": "bool", "value": "true"},
+  "d": {"type": "integer", "value": "4"}
+}

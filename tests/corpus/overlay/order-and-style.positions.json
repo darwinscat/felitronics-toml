@@ -1,0 +1,12 @@
+[
+  {"path": [], "at": [1, 1], "source": 1},
+  {"path": ["c"], "key": [1, 1], "at": [1, 5], "source": 1},
+  {"path": ["t"], "key": [2, 1], "at": [2, 5], "source": 1},
+  {"path": ["t", "k"], "key": [2, 7], "at": [2, 11], "source": 1},
+  {"path": ["t", "m"], "key": [4, 1], "at": [4, 5], "source": 2},
+  {"path": ["a"], "key": [1, 1], "at": [1, 5], "source": 2},
+  {"path": ["h"], "key": [4, 2], "at": [4, 1], "source": 1},
+  {"path": ["h", "k"], "key": [5, 1], "at": [5, 5], "source": 1},
+  {"path": ["h", "n"], "key": [6, 1], "at": [6, 5], "source": 2},
+  {"path": ["new"], "key": [2, 1], "at": [2, 7], "source": 2}
+]

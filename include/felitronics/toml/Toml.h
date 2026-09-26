@@ -105,7 +105,7 @@ struct Position
 
 struct Value;
 struct Entry;
-namespace detail { class Parser; }
+namespace detail { class Parser; struct Layers; }
 
 // Keys cannot be changed in place: that keeps the lookup index consistent with insertion order.
 // The sorted AVL index stores vector offsets, so lookup and insertion take O(log n) comparisons even for
@@ -150,6 +150,7 @@ private:
     [[nodiscard]] std::size_t link (std::size_t n, std::size_t added) noexcept;
     [[nodiscard]] std::size_t locate (std::string_view key) const noexcept;
     friend class detail::Parser;
+    friend struct detail::Layers;
 };
 
 using Array = std::vector<Value>;
@@ -1099,6 +1100,50 @@ private:
     }
 };
 } // namespace detail
+
+namespace detail
+{
+// Walks the two trees with a stack of its own. A table's entries are all replaced or appended before any of its
+// children is visited, so the child pointers taken afterwards stay valid: nothing inserts into that vector again.
+struct Layers
+{
+    static void merge (Table& into, const Table& top)
+    {
+        std::vector<std::pair<Table*, const Table*>> work { { &into, &top } };
+        std::vector<std::pair<std::size_t, const Table*>> nested;
+        while (! work.empty())
+        {
+            auto [dst, src] = work.back();
+            work.pop_back();
+            nested.clear();
+            for (const auto& e : src->entries())
+            {
+                const auto n = dst->locate (e.key);
+                if (n == 0) { (void) dst->insert (e.key, e.value, e.keyPosition); continue; }
+                auto& old = dst->entries_[n - 1];
+                const auto* child = std::get_if<Table> (&e.value.data);
+                if (child != nullptr && std::holds_alternative<Table> (old.value.data)) nested.emplace_back (n - 1, child);
+                else { old.value = e.value; old.keyPosition = e.keyPosition; }
+            }
+            for (const auto& [i, child] : nested) work.emplace_back (std::get_if<Table> (&dst->entries_[i].value.data), child);
+        }
+    }
+};
+}
+
+// The tree base becomes with top laid over it. Where both hold a table at a key, the two merge key by key, at every
+// depth. Anywhere else top's value replaces base's whole: a scalar, an array, an array of tables, and a table that
+// meets anything but a table. Keys only in base stay; keys only in top are appended, in top's order. A merged table
+// keeps base's place, style and position; a replaced entry takes top's key position with top's value. Every value
+// keeps its own position, so position.source tells which layer it came from when each document was parsed with its
+// own source number. Layers apply in order: overlay(overlay(defaults, user), project). It never fails; the result
+// may exceed the document limits, which writeChecked() then refuses.
+[[nodiscard]] inline Table overlay (const Table& base, const Table& top)
+{
+    Table out = base;
+    detail::Layers::merge (out, top);
+    return out;
+}
 
 // Invalid caller-built trees return nullopt: mixed/nested arrays, empty Tables (use Array{} for []), invalid
 // UTF-8/decimals or any exceeded limit. An empty root is valid and produces the empty string.

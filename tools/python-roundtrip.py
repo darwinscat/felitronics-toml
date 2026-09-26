@@ -104,6 +104,58 @@ def check_positions(document, text, positions):
             assert isinstance(path[-1], int), path
 
 
+def merge(base, top):
+    """overlay(), written again from its rule: tables merge key by key, anything else from top replaces base's."""
+    out = dict(base)
+    for key, value in top.items():
+        out[key] = merge(out[key], value) if type(out.get(key)) is dict and type(value) is dict else value
+    return out
+
+
+def lookup(document, path):
+    """The value at path, or None when some step is missing or is not a table or array."""
+    for component in path:
+        if isinstance(component, int):
+            if type(document) is not list or component >= len(document):
+                return None
+        elif type(document) is not dict or component not in document:
+            return None
+        document = document[component]
+    return document
+
+
+def expected_source(base, top, merged, path):
+    """Which layer a value at path comes from, by the rule: arrays are replaced whole, so anything inside one is the
+    array's; a table is base's when base has a table there (tables merge), top's otherwise; any other value is
+    top's when top has something there, base's when it does not."""
+    for i, component in enumerate(path):
+        if isinstance(component, int):
+            return expected_source(base, top, merged, path[:i])
+    if type(lookup(merged, path)) is dict:
+        return 1 if type(lookup(base, path)) is dict else 2
+    return 2 if lookup(top, path) is not None else 1
+
+
+def check_overlay(root):
+    """Each case must read in tomllib, merge here to the expected tree, and each position's source must be the layer
+    the rule names, which holds exactly that value there."""
+    cases = sorted(p.name[:-len(".base.toml")] for p in (root / "overlay").glob("*.base.toml"))
+    for name in cases:
+        read = lambda suffix: (root / "overlay" / (name + suffix)).read_bytes().decode("utf-8")
+        base, top = tomllib.loads(read(".base.toml")), tomllib.loads(read(".top.toml"))
+        merged = merge(base, top)
+        expected = json.loads(read(".json"))
+        compare_tagged(merged, expected, name)
+        compare_tagged(tomllib.loads(read(".canonical.toml")), expected, name + ".canonical.toml")
+        for entry in json.loads(read(".positions.json")):
+            path, source = entry["path"], entry["source"]
+            assert source == expected_source(base, top, merged, path), (name, path, source)
+            value = lookup(merged, path)
+            assert type(value) is dict or lookup({1: base, 2: top}[source], path) == value, (name, path)
+    assert cases, "no overlay cases found"
+    return len(cases)
+
+
 def check_corpus(root):
     valid = sorted(p for p in (root / "valid").glob("*.toml") if not p.name.endswith(".canonical.toml"))
     texts = positioned = 0
@@ -126,9 +178,10 @@ def check_corpus(root):
         except (UnicodeDecodeError, tomllib.TOMLDecodeError, RecursionError):  # 3.14 caps key parts at 1000
             rejected += 1
     assert valid and invalid, "no corpus documents found"
+    overlays = check_overlay(root)
     print(f"tomllib: {len(valid)} valid corpus documents ({texts} texts with their canonical forms) match their "
           f"expected trees, and {positioned} positions files point at their values; {len(invalid)} invalid documents, "
-          f"{rejected} of which tomllib rejects too")
+          f"{rejected} of which tomllib rejects too; {overlays} overlays merge to their expected trees and sources")
 
 
 def main():

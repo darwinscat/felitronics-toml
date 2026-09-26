@@ -1,0 +1,7 @@
+[limiter]
+ceiling = -1.0
+release = 0.050
+[limiter.detector]
+mode = "peak"
+[eq]
+low = 0.0

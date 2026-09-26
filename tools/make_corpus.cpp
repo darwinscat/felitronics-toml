@@ -26,7 +26,7 @@ namespace fs = std::filesystem;
 namespace
 {
 fs::path corpus;
-std::size_t validCount = 0, invalidCount = 0;
+std::size_t validCount = 0, invalidCount = 0, overlayCount = 0;
 
 [[noreturn]] void die (const std::string& message)
 {
@@ -114,6 +114,20 @@ void invalid (const std::string& name, std::string_view text, Code code, std::ui
                                     + fixtures::decimalInteger (line) + ", \"column\": " + fixtures::decimalInteger (column) + "}\n");
     ++invalidCount;
 }
+// overlay/<name>: the base parsed with source 1, the top with source 2, and what overlay() makes of them.
+void layered (const std::string& name, std::string_view base, std::string_view top)
+{
+    auto b = parse (base, 1), t = parse (top, 2);
+    if (! std::holds_alternative<Table> (b) || ! std::holds_alternative<Table> (t)) die ("overlay/" + name + ": a layer is refused");
+    const auto merged = overlay (std::get<Table> (b), std::get<Table> (t));
+    const auto dir = corpus / "overlay";
+    save (dir / (name + ".base.toml"), base);
+    save (dir / (name + ".top.toml"), top);
+    save (dir / (name + ".json"), tree (merged, "") + "\n");
+    save (dir / (name + ".canonical.toml"), write (merged));
+    save (dir / (name + ".positions.json"), fixtures::positionsJson (merged, true));
+    ++overlayCount;
+}
 std::string hex (unsigned char c)
 {
     return { "0123456789abcdef"[c >> 4], "0123456789abcdef"[c & 15] };
@@ -139,6 +153,7 @@ int main (int argc, char** argv)
     corpus = argv[1];
     fs::create_directories (corpus / "valid");
     fs::create_directories (corpus / "invalid");
+    fs::create_directories (corpus / "overlay");
 
     // --- the minimal witness of every error code, and positions in UTF-8 bytes -------------------------------
     invalid ("bom", "\xEF\xBB\xBF", Code::Bom, 1, 1);
@@ -438,6 +453,23 @@ int main (int argc, char** argv)
     for (int i = 0; i < 16; ++i) { Table parent; fixtures::put (parent, "a", std::move (depth)); depth = std::move (parent); }
     valid ("generated-depth-16", write (depth));
 
-    std::printf ("corpus: %zu valid and %zu invalid documents written to %s\n", validCount, invalidCount, corpus.string().c_str());
+    // --- overlay: tables merge key by key, everything else is replaced whole ------------------------------------
+    layered ("scalars-replace-and-append", "a = 1\nb = \"x\"\nc = true\n", "b = \"y\"\nd = 4\n");
+    layered ("tables-merge", "[limiter]\nceiling = -1.0\nrelease = 0.050\n[limiter.detector]\nmode = \"peak\"\n[eq]\nlow = 0.0\n",
+             "[limiter]\nceiling = -2.0\nlookahead = 5\ndetector.mode = \"rms\"\n");
+    layered ("arrays-replace", "a = [1, 2, 3]\nrows = [{ x = 1 }, { x = 2 }]\n[[bands]]\nf = 100\n[[bands]]\nf = 200\n",
+             "a = [9]\nrows = []\n[[bands]]\nf = 1000\n");
+    layered ("type-changes-replace", "a = { x = 1 }\nb = 1\nc = [1]\n[d]\ne = 1\n[[f]]\ng = 1\n",
+             "a = 5\nb = { y = 2 }\nc = { z = 3 }\nd = \"flat\"\nf = { g = 2 }\n");
+    layered ("dotted-header-and-inline-merge", "a.b.c = 1\na.b.d = 2\nt = { x = 1, y = { z = 2 } }\n",
+             "[a.b]\nd = 3\ne = 4\n[t.y]\nw = 5\n");
+    layered ("order-and-style", "c = 3\nt = { k = 1 }\na = 1\n[h]\nk = 1\n", "a = 10\nnew = true\n[t]\nm = 2\n[h]\nn = 2\n");
+    layered ("empty-base", "", "a = 1\n[t]\nb = 2\n");
+    layered ("empty-top", "a = 1\n[t]\nb = 2\n", "# nothing to change\n");
+    layered ("in-scripts", "\"" + fixtures::kyiv + "\" = { \"" + fixtures::klyuch + "\" = \"" + fixtures::nihongo + "\" }\n\"" + fixtures::smile + "\" = 1\n",
+             "[\"" + fixtures::kyiv + "\"]\n\"" + fixtures::arabiyya + "\" = 2\n\"" + fixtures::klyuch + "\" = \"e\u0301\"\n");
+
+    std::printf ("corpus: %zu valid, %zu invalid and %zu overlay documents written to %s\n", validCount, invalidCount, overlayCount,
+                 corpus.string().c_str());
     return 0;
 }

@@ -13,6 +13,11 @@ valid/<name>.canonical.toml    what write() must produce, when that differs from
 valid/<name>.positions.json    where every value and key was written (documents under 64 KiB)
 invalid/<name>.toml            a document the subset refuses
 invalid/<name>.json            {"code": "<Code>", "line": N, "column": M}, the only acceptable refusal
+overlay/<name>.base.toml       a base layer, parsed with source 1
+overlay/<name>.top.toml        a top layer, parsed with source 2
+overlay/<name>.json            the tree overlay(base, top) must give
+overlay/<name>.canonical.toml  what write() must produce for it
+overlay/<name>.positions.json  its positions, each with the source of the layer it came from
 ```
 
 ## Rules
@@ -34,6 +39,10 @@ invalid/<name>.json            {"code": "<Code>", "line": N, "column": M}, the o
    array item and each array-of-tables element. Each record is `{"path": [...], "key": [line, column], "at":
    [line, column]}`; the path holds keys and item indexes, and items and elements have no `"key"`. Lines and
    columns count as in rule 3; `docs/TOML-SUBSET.md` says where each kind of value is.
+5. **Overlays.** Parse `<name>.base.toml` with source 1 and `<name>.top.toml` with source 2, and lay the top over
+   the base (`docs/TOML-SUBSET.md`, "Layers"): the result equals `<name>.json`, writes `<name>.canonical.toml`
+   byte for byte, and has the positions in `<name>.positions.json`, whose records also carry `"source"`, the
+   layer each value and its key came from.
 
 ## Tree encoding
 

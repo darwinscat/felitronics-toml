@@ -1,0 +1,13 @@
+{
+  "a": {"type": "integer", "value": "5"},
+  "b": {
+    "y": {"type": "integer", "value": "2"}
+  },
+  "c": {
+    "z": {"type": "integer", "value": "3"}
+  },
+  "d": {"type": "string", "value": "flat"},
+  "f": {
+    "g": {"type": "integer", "value": "2"}
+  }
+}

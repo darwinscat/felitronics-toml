@@ -394,6 +394,35 @@ empty string on the same refusal; use `writeChecked` when the empty-root distinc
 matters. Construction does not silently clamp or repair data. Empty `Array{}` is
 representable as `[]`; empty `Tables{}` is not representable: an empty array is `Array{}`.
 
+## Layers: `overlay()`
+
+```cpp
+auto defaults = parse (factoryText, 1), user = parse (userText, 2);   // one source number per layer
+Table settings = overlay (std::get<Table> (defaults), std::get<Table> (user));
+if (settings.find ("gain")->position.source == 2) { /* the user set it */ }
+```
+
+`[[nodiscard]] Table overlay (const Table& base, const Table& top)` returns base with top
+laid over it:
+
+- Where both layers hold a **table** at a key, the two merge key by key, at every depth.
+  Plain, implicit, dotted and inline tables all merge; an array element is not a key.
+- Anywhere else **top's value replaces base's whole**: a scalar, an array, an array of
+  tables (arrays are never merged element by element), and a table that meets anything
+  other than a table, in either direction.
+- Keys only in base stay where they are; keys only in top are appended, in top's order. A
+  merged table keeps base's place among its siblings, base's style and base's position. A
+  replaced entry takes top's key position together with top's value.
+
+**Provenance** is carried by positions: every value keeps the position it had in its own
+layer, `source` included, so `value.position.source` is the layer it came from when each
+document was parsed with its own source number. A table present in both layers is base's;
+the values inside it carry their own. Layers apply in order, and the operation is not
+associative, so a program states its stack: `overlay(overlay(defaults, user), project)`.
+`overlay` never fails and changes neither input. Its result may exceed the document
+limits (two full documents have more entries than one may), which `writeChecked` then
+refuses. The merge walks the trees with a stack of its own, not by recursion.
+
 ## Verification
 
 Four ctest suites and the README example cover the contract. The grammar suite asserts

@@ -51,6 +51,7 @@ felitronics_toml_test(felitronics_toml_grammar_tests GrammarTests.cpp)
 felitronics_toml_test(felitronics_toml_decimal_tests DecimalTests.cpp)
 felitronics_toml_test(felitronics_toml_properties_tests PropertiesTests.cpp)
 felitronics_toml_test(felitronics_toml_position_tests PositionTests.cpp)
+felitronics_toml_test(felitronics_toml_overlay_tests OverlayTests.cpp)
 
 # The language-neutral conformance corpus (tests/corpus/README.md): the same files any other implementation
 # of this subset can run to prove it matches, byte for byte and error position for error position.

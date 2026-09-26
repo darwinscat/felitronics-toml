@@ -192,14 +192,16 @@ inline std::vector<Located> locate (const Table& root)
     locate (out, root, "[]");
     return out;
 }
-inline std::string positionsJson (const Table& root)
+// sources: add each value's source number, which its key shares (for trees that overlay() merged).
+inline std::string positionsJson (const Table& root, bool sources = false)
 {
     const auto pair = [] (Position p) { return "[" + decimalInteger (p.line) + ", " + decimalInteger (p.column) + "]"; };
     std::string out = "[\n";
     const auto all = locate (root);
     for (std::size_t i = 0; i < all.size(); ++i)
         out += "  {\"path\": " + all[i].path + (all[i].keyed ? ", \"key\": " + pair (all[i].key) : "") + ", \"at\": "
-             + pair (all[i].at) + (i + 1 == all.size() ? "}\n" : "},\n");
+             + pair (all[i].at) + (sources ? ", \"source\": " + decimalInteger (all[i].at.source) : "")
+             + (i + 1 == all.size() ? "}\n" : "},\n");
     return out + "]\n";
 }
 // The byte offset of a position, found without the parser: count lines, then code points within the line.
