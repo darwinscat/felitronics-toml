@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Changelog
 
-## v0.2.0 — unreleased
+## v0.2.0 — 2026-09-26
 
 The subset grows by four TOML 1.0 constructs, every value knows where it was written, and three optional layers
 build on the parser: typed reading, layered documents and embedded documents.
