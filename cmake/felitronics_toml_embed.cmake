@@ -36,8 +36,11 @@ function(felitronics_toml_embed target)
     set(output "${directory}/${arg_HEADER}")
     get_filename_component(parent "${output}" DIRECTORY)
     file(MAKE_DIRECTORY "${parent}")
+    # The tool deliberately leaves an equal header's timestamp alone. Mark a successful generation current so Make
+    # does not repeat it while the unchanged header remains older than its input.
     add_custom_command(OUTPUT "${output}"
         COMMAND "${tool}" "${input}" "${output}" "${arg_NAMESPACE}" "${arg_NAME}"
+        COMMAND "${CMAKE_COMMAND}" -E touch "${output}"
         DEPENDS "${input}" "${tool}"
         COMMENT "felitronics_toml2cpp ${arg_INPUT}"
         VERBATIM)
