@@ -15,8 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Every row runs the same six tests, and the property suite must print the same corpus digest on each
-  # (ctest pins it), so "every platform reads the same bits" is checked, not assumed.
+  # Every row runs the same tests, and the property suite must print the same corpus digest on each (ctest pins it),
+  # so "every platform reads the same bits" is checked, not assumed. The embedding suite runs felitronics_toml2cpp
+  # at build time on every valid corpus document, on every row, wasm included (through node).
   build-test:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -96,6 +97,32 @@ jobs:
         run: python tools/python-roundtrip.py build/tests/felitronics_toml_properties_tests
       - name: The conformance corpus, read by tomllib
         run: python tools/python-roundtrip.py --corpus tests/corpus
+
+  package:
+    name: package and embedding (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and install
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFELITRONICS_TOML_BUILD_TESTS=OFF
+          cmake --build build --config Release --parallel
+          cmake --install build --config Release --prefix "${{ github.workspace }}/prefix"
+      - name: A consumer with find_package and felitronics_toml_embed
+        run: |
+          cmake -S tests/consumer -B consumer -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=${{ github.workspace }}/prefix"
+          cmake --build consumer --config Release
+          ctest --test-dir consumer -C Release --output-on-failure --no-tests=error
+      - name: A consumer with the source tree, as FetchContent adds it
+        run: |
+          cmake -S tests/consumer -B consumer-source -DCMAKE_BUILD_TYPE=Release "-DFELITRONICS_TOML_SOURCE=${{ github.workspace }}"
+          cmake --build consumer-source --config Release
+          ctest --test-dir consumer-source -C Release --output-on-failure --no-tests=error
 
   fuzz:
     name: libFuzzer (60 s, seeded with the corpus)

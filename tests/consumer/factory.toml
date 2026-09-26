@@ -1,0 +1,7 @@
+# The factory preset, compiled into the program.
+name = "Warm master"
+ceiling = -1.0
+bands = [
+    { frequency = 100, gain = 1.5 },
+    { frequency = 8000, gain = -2 },
+]

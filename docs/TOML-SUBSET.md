@@ -493,6 +493,53 @@ associative, so a program states its stack: `overlay(overlay(defaults, user), pr
 limits (two full documents have more entries than one may), which `writeChecked` then
 refuses. The merge walks the trees with a stack of its own, not by recursion.
 
+## Embedding: `felitronics_toml2cpp` and `<felitronics/toml/Embedded.h>`
+
+A document can be compiled into the program as `constexpr` data, so nothing is parsed at
+run time: factory presets, default settings, lookup tables. In CMake:
+
+```cmake
+felitronics_toml_embed(app INPUT factory.toml NAMESPACE presets NAME factory)
+```
+
+At build time the tool `felitronics_toml2cpp` (built from `tools/toml2cpp.cpp`) parses
+`factory.toml` and writes `factory.h` into the target's include path; the header is
+regenerated when the document or the tool changes, and rewritten only when its bytes
+change. A document the parser refuses fails the build with
+`factory.toml:<line>:<column>: error: <Code>`, the form compilers and IDEs understand.
+`HEADER <path>` chooses another header name. The tool runs on the build machine: under
+Emscripten through node, and when cross-compiling without an emulator a host build of the
+tool is named by `FELITRONICS_TOML2CPP_EXECUTABLE`. Run by hand, it is
+`felitronics_toml2cpp <input.toml> <output.h> <namespace> <name>`.
+
+```cpp
+#include "factory.h"
+constexpr auto root = presets::factory.root();                // an embedded::View
+static_assert (root.find ("bands").size() == 2);
+const Table settings = embedded::toTable (root, 1);          // for Reader, overlay(), write()
+```
+
+The header holds `presets::factory`, a `constexpr embedded::Document`: an array of
+`embedded::Node`, one per value, where a container's children sit side by side, and for
+each table an index of its entries sorted by key. It is generic, not tied to any schema.
+`embedded::View` walks it in constant expressions and at run time: `type()`, `is()`,
+`key()`, `size()`, `operator[]`, iteration over children in document order, `find(key)` in
+O(log n) comparisons, and `string()`, `integer()`, `decimal()`, `boolean()` as
+`std::optional`s, empty for another type. An empty `View` answers every accessor with an
+empty result, so a path is walked without a check at each step:
+`root.find ("limiter").find ("ceiling").decimal()`. `position()`, `keyPosition()` and
+`isInline()` carry what `parse()` recorded, with source 0.
+
+`embedded::toTable(view, source)` copies a document into the `Table` that `parse()` gives
+for its text: the same data, key order, styles and positions, with `source` in every
+position. It allocates but does not parse, and it is how an application binds embedded
+data to its own structs with the `Reader` of `Schema.h`, or lays a user's file over it
+with `overlay()`. Strings are spelled with octal escapes for every byte outside printable
+ASCII, so the header means the same in any source character set, and strings from 4000
+bytes up are `char` arrays instead of literals, since MSVC caps a literal at 65535 bytes.
+The embedding suite embeds every valid document of the corpus and compares each node, and
+`toTable()` of it, with what `parse()` makes of the same file.
+
 ## Verification
 
 Four ctest suites and the README example cover the contract. The grammar suite asserts
