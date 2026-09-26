@@ -1,6 +1,47 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Changelog
 
+## v0.2.0 — unreleased
+
+The subset grows by four TOML 1.0 constructs, every value knows where it was written, and three optional layers
+build on the parser: typed reading, layered documents and embedded documents.
+
+- **Inline tables** `{ k = v }` and **arrays of them**, with TOML's rules: one line, no trailing comma, closed
+  once defined, nested within the depth limit. An array of inline tables is one type, "table", and parses to
+  `Tables`, the same data `[[headers]]` give. Two new error codes, appended to the enum:
+  `UnterminatedInlineTable` and `ExpectedInlineTableSeparator`.
+- **Multi-line basic strings** `"""..."""`, with TOML's rules; CRLF inside reads as LF, so a checkout cannot
+  change a value.
+- **Underscores** between digits of integers and decimals: `48_000`, `1_000.000_1`.
+- **Positions.** `Value::position`, `Entry::keyPosition` and `Table::position` give the line and code point column
+  where each was written, and `parse(text, source)` puts a source number in each. They take no part in equality.
+  `Table::entry()` returns a whole entry; `Table::insert()` takes an optional key position.
+- **Canonical form.** `Table::style` (`Header` or `Inline`) chooses how a table is written. The parser marks the
+  tables it read in braces inline, so a load and a save keep them inline; an array of tables is inline when all
+  its tables are, and at statement level puts one table on each line. A string that is a statement's whole value
+  and contains a line feed is written as a multi-line string. The writer never emits underscores.
+- **`overlay(base, top)`** merges tables key by key and replaces everything else whole; each value keeps its
+  layer's position, so `position.source` tells where it came from.
+- **`<felitronics/toml/Schema.h>`**: `Reader` reads fields into an application's structs with types, inclusive
+  ranges, defaults and requirements, through `table()` and `tables()` callbacks, and reports keys nobody read as
+  `UnknownKey`, an error or a warning. Problems are data: a `Fault`, the key path, the position. An integer reads
+  losslessly where a decimal is expected: `n` is `n.0`.
+- **`<felitronics/toml/Embedded.h>`, `felitronics_toml2cpp` and `felitronics_toml_embed()`**: a document compiled
+  into the program as constexpr data at build time, walked by `embedded::View` in constant expressions, and copied
+  into a `Table` by `embedded::toTable()`. The package installs the CMake function, and the tool when it was built
+for the build machine; a cross build names one in `FELITRONICS_TOML2CPP_EXECUTABLE`.
+
+Contract changes a port has to follow, all in the corpus:
+
+- `a={}`, `a=1_000` and `a="""x"""` are valid now; their old invalid cases moved to `valid/`.
+- A bare value's token also ends at `}`: `a=1}` is `TrailingCharacters` at 1:4, no longer `InvalidNumber` at 1:3.
+- Canonical text changes for statement strings that contain a line feed, so the generated corpus documents and the
+  pinned digest of the property suite changed: it is now `15547082836514840367`, which also covers the new inline
+  tables in the generated trees.
+- New in the corpus: `valid/<name>.positions.json` for every document under 64 KiB, `overlay/` and `schema/`.
+  72 valid documents, 427 invalid ones, 9 overlays and 9 schema cases.
+- CI builds and runs a consumer project from the installed package and from the source tree.
+
 ## v0.1.0 — 2026-09-26
 
 The first release: `felitronics::toml`, a strict, deterministic subset of TOML 1.0 for C++20. A parser and a

@@ -11,9 +11,17 @@ I/O, not a streaming or real-time API. It does not preserve comments. Store vers
 and other information that must survive a save as string values; comments remain useful for
 hand-edited or pasted input.
 
+Three optional headers build on it, each depending only on `Toml.h`:
+`<felitronics/toml/Schema.h>` reads fields into an application's structs with types,
+ranges and defaults, and reports keys nobody read; `<felitronics/toml/Embedded.h>` walks a
+document that `felitronics_toml2cpp` compiled into the program as `constexpr` data; and
+`overlay()`, in `Toml.h` itself, lays one document over another.
+
 This document is the contract. Its executable form is the conformance corpus in
-[`tests/corpus/`](../tests/corpus/README.md): valid documents with their expected trees and
-canonical text, invalid documents with their exact error code and position.
+[`tests/corpus/`](../tests/corpus/README.md): valid documents with their expected trees,
+canonical text and positions, invalid documents with their exact error code and position,
+layered documents with their merged tree, and schema cases with the values and problems
+they read.
 
 ## API and ownership
 
@@ -39,8 +47,8 @@ const Decimal gain = Decimal::fromDouble (-1.25, 3);
 // Test gain.valid() before putting a conversion result in a tree.
 ```
 
-`[[nodiscard]] ParseResult parse (std::string_view) noexcept` returns
-`std::variant<Table, Error>`. `Error` contains only `Code`, `uint32_t line`, and
+`[[nodiscard]] ParseResult parse (std::string_view text, std::uint32_t source = 0) noexcept`
+returns `std::variant<Table, Error>`; `source` is copied into every position (below). `Error` contains only `Code`, `uint32_t line`, and
 `uint32_t column`. `codeName(Code)` returns a stable enum spelling for logs and tests,
 not a localized user message. There is no exception or RTTI dependency. Process-wide
 allocation failure is not recoverable in a build without exceptions; the document limits
@@ -50,12 +58,12 @@ A `Value` wraps a public `data` variant of `std::string`, `std::int64_t`, `Decim
 `bool`, `Array` (`std::vector<Value>`), `Table`, and `Tables` (`std::vector<Table>`).
 An `Array` contains only one scalar alternative; an empty array has no element type.
 `Tables` is a nonempty array of tables and is distinct from `Array`, whether the document
-spelled it with `[[headers]]` or as an array of inline tables: both are the same data. Construct integers
-explicitly as `std::int64_t` to distinguish them from booleans.
+spelled it with `[[headers]]` or as an array of inline tables: both are the same data.
+Construct integers explicitly as `std::int64_t` to distinguish them from booleans.
 
 `Table::insert(string, Value)` appends and returns false on an existing key. `find`
-returns a pointer or null. `entries()` exposes the insertion-ordered entries as a const
-vector of `{key, value}`. A private AVL index over vector offsets bounds lookup and
+returns a pointer or null, and `entry` the whole entry. `entries()` exposes the
+insertion-ordered entries as a const vector of `{key, value, keyPosition}`. A private AVL index over vector offsets bounds lookup and
 insertion to O(log n) key comparisons even for deliberately sorted keys. Insertion can
 invalidate pointers into the table's entries. The tree owns all its data; there are no
 borrowed input views. Copies have their own indexes, and moved-from tables are reusable.
@@ -63,7 +71,7 @@ borrowed input views. Copies have their own indexes, and moved-from tables are r
 Tree equality compares mappings by key, independent of insertion order, and preserves
 array order, scalar alternatives, decimal scale, and decimal negative zero. Formatting
 order is observable separately through `entries()` and `write()`: it is not part of
-TOML's mapping value. This distinction is necessary because the writer groups scalars,
+TOML's mapping value, and neither are positions or a table's style. This distinction is necessary because the writer groups scalars,
 plain tables and arrays of tables, even when callers inserted those groups interleaved.
 
 ## Positions
@@ -84,10 +92,12 @@ auto result = parse (text, 2);                              // every Position ge
 - A **key** (`Entry::keyPosition`) is at the first character of its bare or quoted
   spelling, where the entry was first written. For a dotted path, each component's entry
   is at that component.
-- A **table** defined by a header is at the header's `[`. A table that a dotted key or a
-  longer header only implies is at the key component that first named it; when a header
-  later defines it, it moves to that header. An array of tables is at its first `[[`, and
-  each element at its own `[[`. A `Value` holding a table has the table's position.
+- A **table** defined by a header is at the header's `[`, an inline table at its `{`. A
+  table that a dotted key or a longer header only implies is at the key component that
+  first named it; when a header later defines it, it moves to that header. An array of
+  tables is at its first `[[`, and each element at its own `[[`; an array of inline tables
+  is at its `[`, and each table in it at its `{`. A `Value` holding a table has the table's
+  position.
 - The **root** of a parsed document is at 1:1.
 - `source` is the number passed to `parse(text, source)` (0 by default), copied into
   every position of the tree, so values keep telling which document they came from after
@@ -206,9 +216,9 @@ any array may; each table in it is on one line.
 
 **Depth and entries.** An inline table's keys continue its key's path, so the 16-component
 limit counts them: `a = { b = { c = 1 } }` reaches depth 3. The tables of an array of inline
-tables are one level below the array's key, as under `[[a]]`. Every key counts as one entry
-and every table of an array of inline tables as one more, exactly as headers count them,
-and each is counted when it is inserted into the tree: an inline table's contents while it
+tables are at the array's key, and their keys one level below it, as under `[[a]]`. Every
+key counts as one entry and every table of an array of inline tables as one more, exactly
+as headers count them, and each is counted when it is inserted into the tree: an inline table's contents while it
 is read, its own key after it, and an array's key after all its tables. So a document with
 one entry too many through the tables of an array reports `EntryLimit` at the array's key.
 The parser recurses once per nested inline table, which the depth limit bounds.
@@ -232,8 +242,8 @@ The header asserts IEEE binary64, and that `double` arithmetic is evaluated as `
 (`FLT_EVAL_METHOD` 0 or 1): x87 arithmetic rounds a quotient twice, first to 64 bits, and
 `7832510068573872 / 10^8` then comes out one unit in the last place low. A 32-bit x86
 build therefore needs SSE2 arithmetic (MSVC's default; `-msse2 -mfpmath=sse` for gcc and
-clang). The contract excludes fast-math and changes to the floating-point rounding mode; `-ffp-contract=off` and the wasm no-exceptions/no-RTTI
-settings are supported. No mutable globals or function-local statics are used.
+clang). The contract excludes fast-math and changes to the floating-point rounding mode;
+`-ffp-contract=off` and the wasm no-exceptions/no-RTTI settings are supported. No mutable globals or function-local statics are used.
 
 `Decimal::fromDouble(double x, uint8_t scale)` returns a `Decimal`, rounding the
 binary64 product `x * 10^scale` half away from zero. The multiplication itself can
@@ -253,16 +263,18 @@ NaN and the writer refuses them. No floating-to-integer cast occurs before range
 | Absolute key path | 16 components, including current-table prefix | `DepthLimit` at the next component |
 | One decoded key | 256 UTF-8 bytes | `KeyLimit` at the character or escape that exceeds the limit |
 | One decoded string | 65536 UTF-8 bytes | `StringLimit` at the character or escape that exceeds the limit |
-| One scalar array | 65536 items | `ArrayLimit` at the next item |
+| One array (scalars or inline tables) | 65536 items | `ArrayLimit` at the next item |
 | Total entries | 65536 | `EntryLimit` at the responsible key component, or at the `{` of an array's table |
 
-Every key/value entry counts once, including implicit tables and array-of-tables
-containers; each array-of-tables element counts once additionally. Scalar array items
-do not consume entries. Consequently one array-of-tables container can hold at most
-65535 empty elements before the overall entry limit intervenes. The root is not an
-entry. Header/assignment paths are iterative; accepted trees have depth at most 16.
-Index recursion is bounded by AVL height. Writer descent checks depth before entering
-a child; it never recursively processes nested value arrays.
+Every key/value entry counts once, including implicit tables, inline tables and
+array-of-tables containers; each array-of-tables element counts once additionally,
+whether it is a `[[header]]` or an inline table in an array. Scalar array items do not
+consume entries. Consequently one array-of-tables container can hold at most 65535 empty
+elements before the overall entry limit intervenes. The root is not an entry.
+Header/assignment paths are iterative; accepted trees have depth at most 16. The parser
+recurses only into nested inline tables and arrays of them, which the depth limit bounds.
+Index recursion is bounded by AVL height. Writer descent checks depth before entering a
+child; it never recursively processes nested value arrays.
 
 Canonical output has a separate size check because adding spaces and spelling escaped
 keys can grow a compact input. A syntactically valid input that fits 1 MiB but whose
@@ -284,7 +296,8 @@ line once and its CR is the last column of its line. End of input is one column 
 last character. Only one error is returned.
 A document-size error precedes parsing. Otherwise the parser stops at the first lexical
 or syntax failure; an invalid encoding/control byte takes precedence at the same position.
-A bare value (a number or a boolean) is judged as one whole token: when it runs into an
+A bare value (a number or a boolean) is judged as one whole token, which runs to the next
+space, tab, line ending, comma, `]`, `}` or `#`: when it runs into an
 invalid encoding/control byte, that byte's error is the result, even if the characters
 before it are already out of range (`a=0.0000000000` followed by byte 0x80 is
 `InvalidUtf8` at 1:15, not `DecimalScale` at 1:14).
@@ -383,9 +396,10 @@ a `key = value` line and contains a line feed is written as a multi-line string 
 the opening quotes after `= `, a line feed, the text with a raw line feed for each `\n`,
 and the closing quotes right after the last character. A quote in it stays raw unless
 another quote or the closing quotes follow it, when it is `\"`; everything else is
-escaped as in a one-line string, CR included. Strings in arrays stay on one line. Decimals retain their scale and
-negative zero. All line endings are LF, every emitted statement ends with LF, and one
-blank line separates tables. There are no comments or leading blank lines.
+escaped as in a one-line string, CR included. Strings in arrays and inline tables stay on
+one line. Decimals retain their scale and negative zero. All line endings are LF, every
+emitted statement ends with LF, and one blank line separates tables. There are no
+comments or leading blank lines.
 
 `writeChecked(const Table&)` returns `std::optional<std::string>` and refuses invalid
 caller-built trees (including invalid UTF-8, invalid decimals, duplicate-free but
@@ -429,7 +443,7 @@ equals `0.0`, and `12.000000001` is above `12.0`. A decimal bound that is not a 
 
 **Integers where a decimal is expected.** The parser keeps integers and decimals apart;
 this layer accepts an integer for a `Decimal` or `double` field, losslessly: `n` reads as
-`n.0`, mantissa `n × 10` at scale 1, the very value a document spelling `n.0` gives. Scale
+`n.0`, mantissa `n * 10` at scale 1, the very value a document spelling `n.0` gives. Scale
 1 is the smallest scale a `Decimal` has, so nothing is invented. That holds while
 `|n| <= 900719925474099` (2^53 / 10); a larger integer is `OutOfRange`. `-0` is integer 0
 and reads as `0.0`. `asDecimal(value)` applies the same rule to a single `Value`.
@@ -509,8 +523,10 @@ change. A document the parser refuses fails the build with
 `factory.toml:<line>:<column>: error: <Code>`, the form compilers and IDEs understand.
 `HEADER <path>` chooses another header name. The tool runs on the build machine: under
 Emscripten through node, and when cross-compiling without an emulator a host build of the
-tool is named by `FELITRONICS_TOML2CPP_EXECUTABLE`. Run by hand, it is
-`felitronics_toml2cpp <input.toml> <output.h> <namespace> <name>`.
+tool is named by `FELITRONICS_TOML2CPP_EXECUTABLE`. An installed package includes the tool
+only when it was built for the build machine: a package installed from a cross build,
+Emscripten included, has the function and needs `FELITRONICS_TOML2CPP_EXECUTABLE`. Run by
+hand, it is `felitronics_toml2cpp <input.toml> <output.h> <namespace> <name>`.
 
 ```cpp
 #include "factory.h"
@@ -542,17 +558,21 @@ The embedding suite embeds every valid document of the corpus and compares each 
 
 ## Verification
 
-Four ctest suites and the README example cover the contract. The grammar suite asserts
-every error code with its exact position, every limit at the limit and one past it, and
-hostile bytes in every context. The decimal suite checks 90000 seeded rationals and every
-edge against an oracle that uses integer binary long division and ties-to-even remainder
-tests, independent of the production floating-point division. The property suite writes
-512 seeded trees (every scale, signed zero, int64 edges, all escape classes, non-ASCII
-text, all scalar arrays, nested tables and nested arrays of tables) and requires
-`parse(write(tree)) == tree` and byte-identical rewriting; the FNV-1a digest of its
-canonical bytes is pinned in ctest, so every platform is compared against the same number.
-The corpus suite runs `tests/corpus/`. The example is built twice, the second time with
-exceptions and RTTI off.
+Eight ctest suites, the README example and three checks of the tool cover the contract. The
+grammar suite asserts every error code with its exact position, every limit at the limit
+and one past it, and hostile bytes in every context. The decimal suite checks 90000 seeded
+rationals and every edge against an oracle that uses integer binary long division and
+ties-to-even remainder tests, independent of the production floating-point division. The
+property suite writes 512 seeded trees (every scale, signed zero, int64 edges, all escape
+classes, non-ASCII text, all scalar arrays, nested tables, nested arrays of tables, inline
+tables with tables and arrays of tables inside, arrays of inline tables, and multi-line
+strings) and requires `parse(write(tree)) == tree` and byte-identical rewriting; the FNV-1a
+digest of its canonical bytes is pinned in ctest, so every platform is compared against the
+same number. The position suite checks every construct at its exact position and finds each
+position's character in the generated documents without the parser. The overlay and schema
+suites check their rules, and the embedding suite embeds every valid corpus document at
+build time and compares each node with the parse of the same file. The corpus suite runs
+`tests/corpus/`. The example is built twice, the second time with exceptions and RTTI off.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -566,7 +586,10 @@ The Python check (3.11 or later) uses only `tomllib` and the standard library. T
 suite's `--dump` mode emits JSONL records containing each canonical text and its
 independently serialized original tree; Python compares all types and values, including
 binary64 bits and signed zero. In `--corpus` mode it reads every valid corpus document and
-its canonical text as the expected tree. CI runs both.
+its canonical text as the expected tree, checks that every position points at what its
+value starts with, merges every overlay case again from the rule and checks every source,
+and reads every schema case again from the rules of typed reading, problem for problem.
+CI runs both.
 
 ```sh
 cmake -S . -B build-fuzz -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ \
@@ -580,4 +603,5 @@ The optional target compiles with `-fsanitize=fuzzer,address,undefined`, excepti
 RTTI off, and hard-failing UBSan. It requires a native Clang installation that actually
 ships the libFuzzer runtime (Apple's does not; a Linux distribution's clang does). Arbitrary
 bytes must either return an error or yield a tree whose canonical output reparses to the
-same value and writes to identical bytes.
+same value and writes to identical bytes, in which every value has a position, and over
+which `overlay()` of an equal tree changes nothing.

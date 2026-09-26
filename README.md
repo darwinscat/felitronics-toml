@@ -2,7 +2,8 @@
 # felitronics-toml
 
 **A strict, deterministic subset of TOML for C++20: a parser and a canonical writer in one header, with no
-dependencies.**
+dependencies. Optional layers read fields into your structs, merge documents, and compile a document into the
+program as constexpr data.**
 
 For configuration and project files that must read as the same values on every platform and save as the same
 bytes every time: a plugin on macOS and Windows, a Linux build server, the same code compiled to WebAssembly.
@@ -15,12 +16,22 @@ bytes every time: a plugin on macOS and Windows, a Linux build server, the same 
   highlights the spot. The column counts characters: a Cyrillic letter, a CJK character or an emoji is one
   column, whatever its UTF-8 length. No English strings inside, no exceptions.
 - **Bounded.** 1 MiB documents, 16 levels, fixed limits on keys, strings, arrays and entries. No recursion
-  deepens with the input, so hostile input gets an error, not a stack overflow.
+  deepens past the depth limit, so hostile input gets an error, not a stack overflow.
+- **Positions on everything.** Every value, key and table remembers its line and column, so your own semantic
+  errors ("gain out of range") point at the right spot, in the right file.
+- **Hand-written shapes.** Inline tables and arrays of them, multi-line strings and `48_000` are read as TOML
+  reads them, and a load and a save keep inline rows inline, one row per line. Comments are still not kept.
+- **Typed reading.** `Schema.h` reads fields into your own structs with types, ranges, defaults and requirements,
+  and reports every key it did not read, so a typo is an error (or a warning) instead of a silently ignored
+  setting. No macros, no reflection.
+- **Layers and embedding.** `overlay()` lays a user's file over defaults and remembers which layer each value came
+  from. `felitronics_toml_embed()` compiles a document into the program as constexpr data: nothing parsed at run
+  time.
 - **Small enough to specify completely.** The whole grammar fits on one page, and a
   [conformance corpus](tests/corpus/README.md) lets an implementation in any other language prove it matches.
 
-One header, `<felitronics/toml/Toml.h>`, standard library only. No exceptions, no RTTI, no iostreams, no mutable
-globals.
+The parser and writer are one header, `<felitronics/toml/Toml.h>`, standard library only; `Schema.h` and
+`Embedded.h` are optional layers on it. No exceptions, no RTTI, no iostreams, no mutable globals.
 
 ## Example
 
@@ -75,6 +86,82 @@ release = 0.050
 This is [`tests/Example.cpp`](tests/Example.cpp). ctest builds it twice, the second time with exceptions and
 RTTI off, and compares the output byte for byte.
 
+### Reading into your structs
+
+```cpp
+#include <felitronics/toml/Schema.h>
+
+struct Band { std::int64_t frequency = 0; Decimal gain; };
+struct Limiter { double ceiling = -1.0; int lookaheadMs = 5; };
+
+Limiter limiter;
+std::vector<Band> bands;
+const Report report = read (root, [&] (Reader& in)
+{
+    in.table ("limiter", Need::Required, [&] (Reader& t)
+    {
+        t.required ("ceiling", limiter.ceiling, { -12.0, 0.0 });   // a double in [-12, 0]
+        t.optional ("lookahead", limiter.lookaheadMs, { 0, 50 });  // keeps 5 when absent
+    });
+    in.tables ("bands", Need::Optional, [&] (Reader& row)          // [[bands]], or bands = [{ ... }, ...]
+    {
+        Band b;
+        row.required ("frequency", b.frequency, { 20, 20000 });
+        row.required ("gain", b.gain);                             // gain = 3 reads as 3.0
+        bands.push_back (b);
+    });
+});
+for (const Problem& p : report.problems)                           // UnknownKey limiter.ceilng at 3:1
+    std::printf ("%s %s at %u:%u\n", faultName (p.fault), p.path.c_str(), unsigned (p.position.line), unsigned (p.position.column));
+```
+
+A schema is plain code, one function per struct if you like, and they compose by calling each other. Every
+problem is a stable code (`Missing`, `WrongType`, `OutOfRange`, `UnknownKey`, `Refused`), the key path and the
+position; `ReadOptions{Severity::Warning}` turns unknown keys into warnings. An integer is accepted where a decimal is
+expected, losslessly: `3` reads as `3.0`.
+
+### Layers
+
+```cpp
+auto defaults = parse (factoryText, 1), user = parse (userText, 2);   // a source number per document
+const Table settings = overlay (std::get<Table> (defaults), std::get<Table> (user));
+```
+
+Tables merge key by key; anything else the user's file holds (a scalar, an array, an array of tables) replaces the
+default whole. Every value keeps its position, source included, so `settings.find ("gain")->position.source` is 2
+when the user set it, and a problem the reader reports names the file to fix.
+
+### Inline tables
+
+```toml
+limiter = { ceiling = -1.0, release = 0.050 }
+bands = [
+    { frequency = 100, gain = 1.5 },
+    { frequency = 8_000, gain = -2.0 },
+]
+```
+
+This reads as the same data a `[limiter]` table and `[[bands]]` headers give, so your code reads it one way. The
+parser marks the tables it read in braces (`Table::style`), and the writer keeps them that way: a load and a save
+give the file back with each row on a line of its own (and `8_000` spelled `8000`).
+
+### Embedding
+
+```cmake
+felitronics_toml_embed(my_app INPUT presets/factory.toml NAMESPACE presets NAME factory)
+```
+
+```cpp
+#include "factory.h"                                                     // generated at build time
+
+static_assert (presets::factory.root().find ("bands").size() == 2);     // constexpr: nothing parsed at run time
+const Table factory = embedded::toTable (presets::factory.root(), 1);   // for the reader, or under overlay()
+```
+
+A document the parser refuses fails the build with `factory.toml:12:5: error: DuplicateKey`.
+[`tests/consumer/`](tests/consumer) is a complete project that embeds a preset, lays a user's file over it and
+reads the result into structs; CI builds it from the installed package and from the source tree.
+
 ## Why it exists
 
 Reading `gain = -1.25` looks trivial until the same file has to produce the same number everywhere. `strtod`
@@ -91,7 +178,7 @@ This library answers each of those with a rule instead of a dependency:
   platform. The header refuses to compile where `double` is not IEEE binary64, or where `double` arithmetic
   runs in x87 extended precision (32-bit x86 without SSE2), which rounds twice and can land one bit off.
 - The writer spells decimals from their integers and keeps scale and negative zero: `1.2300` stays `1.2300`.
-- Errors are 30 enum codes with a 1-based line and a 1-based column counted in code points, so a position
+- Errors are 32 enum codes with a 1-based line and a 1-based column counted in code points, so a position
   means the same thing to a person reading Ukrainian, Japanese or Arabic as to one reading English.
   `codeName()` gives a stable identifier for logs; the message a user reads is yours to write, in their
   language.
@@ -105,13 +192,14 @@ This library answers each of those with a rule instead of a dependency:
 | TOML 1.0 | Here |
 |---|---|
 | Basic strings `"..."`, every escape | Yes. UTF-8 is validated; raw control characters are refused |
-| Literal strings `'...'`, multi-line strings | No |
-| Integers | Decimal digits only, signed 64-bit. No leading zeros, no `_`, no hex, octal or binary |
-| Floats | Exact decimals only: 1 to 9 fractional digits, `\|mantissa\| <= 2^53`. No exponent, `inf`, `nan` |
+| Multi-line basic strings `"""..."""` | Yes, with TOML's rules; CRLF inside reads as LF |
+| Literal strings `'...'` and `'''...'''` | No |
+| Integers | Decimal digits only, signed 64-bit, `_` between digits. No leading zeros, no hex, octal or binary |
+| Floats | Exact decimals only: 1 to 9 fractional digits, `\|mantissa\| <= 2^53`, `_` between digits. No exponent, `inf`, `nan` |
 | Booleans | Yes |
 | Offset and local dates and times | No |
-| Arrays | One scalar type per array, no nesting. Trailing comma and comments inside are fine |
-| Inline tables `{ ... }` | No |
+| Arrays | One type per array: a scalar type, or inline tables. No nested arrays. Trailing comma and comments inside are fine |
+| Inline tables `{ ... }` | Yes, with TOML's rules: one line, no trailing comma, closed once defined |
 | Tables, dotted keys, quoted keys | Yes, with TOML's rules on redefinition |
 | Arrays of tables `[[...]]` | Yes, including nested ones |
 | Comments | Accepted and dropped: keep anything that must survive a save in a string value |
@@ -124,45 +212,51 @@ limit and error code, and exactly where each error points.
 
 ## How it is tested
 
-Four suites, **117,286 checks** on every platform:
+Eight suites, **118,196 checks** on every platform:
 
 | Suite | Checks | What |
 |---|---:|---|
-| grammar | 437 | every error code at its exact position, every limit at the limit and one past it, hostile bytes in every context, columns after multi-byte text |
+| grammar | 572 | every error code at its exact position, every limit at the limit and one past it, hostile bytes in every context, columns after multi-byte text, inline tables, multi-line strings, underscores |
 | decimal | 90,191 | 90,000 seeded rationals and every edge, against an oracle that uses integer long division only |
 | property | 26,137 | 512 generated trees: `parse(write(tree)) == tree`, and writing again gives the same bytes |
-| corpus | 521 | the [conformance corpus](tests/corpus/README.md): 57 valid documents, 366 invalid ones |
+| position | 187 | every construct at its exact position; every position of 128 generated documents found again without the parser |
+| overlay | 18 | the merge rule, provenance, styles, empty layers, three layers in order |
+| schema | 53 | whole documents into structs, every fault at its position, ranges across scales, integers as decimals |
+| corpus | 745 | the [conformance corpus](tests/corpus/README.md): 72 valid documents, 427 invalid ones, 9 overlays, 9 schema cases |
+| embedding | 293 | every valid corpus document embedded at build time, node for node against its parse, some with `static_assert` |
 
 The property suite hashes the canonical bytes of everything it writes, and ctest requires the same hash,
-`15720607452201634850`, on every platform. Before this release all four suites passed, with that hash, on:
+`15547082836514840367`, on every platform. Before this release all the suites passed, with that hash, on:
 
 | Platform | Compiler | Builds |
 |---|---|---|
 | macOS 26.5, arm64 | Apple clang 21.0.0 | Release; Debug with ASan + UBSan |
-| macOS 13.7.4, x86-64 | Apple clang 14.0.3 | `-O2` |
 | Debian 13, x86-64 | GCC 14.2.0 | Release; Debug with ASan + UBSan + LeakSanitizer |
 | Windows 11, x64 | MSVC 19.44, `/W4 /WX /permissive-` | Release; Debug with `/fsanitize=address` |
-| WebAssembly, node 24.19 | Emscripten 6.0.9 | Release, exceptions and RTTI off |
-| Debian 13, i686 (32-bit, emulated in Docker) | GCC 14.2.0, `-msse2 -mfpmath=sse` | Release |
+| WebAssembly, node 24.19 | Emscripten 6.0.9 | Release, exceptions and RTTI off; the embedding tool runs in node at build time |
 
-All test code builds with warnings as errors (`-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
--Wshadow` and more on gcc and clang).
+All test code, and the headers the embedding tool generates, build with warnings as errors (`-Wall -Wextra
+-Wpedantic -Wconversion -Wsign-conversion -Wshadow` and more on gcc and clang, `/W4 /WX` on MSVC).
 
 - **An independent reader.** Python's `tomllib` reads all 514 generated documents and every valid corpus
-  document as the expected values, down to the bits of every decimal and the sign of zero. Checked with Python
-  3.11, 3.13 and 3.14.
+  document as the expected values, down to the bits of every decimal and the sign of zero. The same script checks
+  every corpus position against the text, merges every overlay case again, and reads every schema case again from
+  the rules. Checked with Python 3.11, 3.13 and 3.14.
 - **Fuzzing.** libFuzzer with ASan and UBSan: arbitrary bytes must be refused, or parse to a tree whose
-  canonical text reads back as the same tree and writes the same bytes. A 10-minute run executed
-  30,501,345 inputs with no finding; CI fuzzes for another minute on every push.
+  canonical text reads back as the same tree and writes the same bytes, where every value has a position and
+  `overlay()` of an equal tree changes nothing. A 10-minute run executed 5,647,240 inputs with no finding; CI
+  fuzzes for another minute on every push.
 - **CI** repeats the Release suites on gcc 14, clang, Apple clang and MSVC, the sanitizer row, the wasm row,
-  the `tomllib` checks on Python 3.11 and the fuzzer.
+  the `tomllib` checks on Python 3.11, the fuzzer, and a consumer project that embeds a document, from the
+  installed package and from the source tree, on Linux, macOS and Windows.
 
 ## Conformance corpus
 
 [`tests/corpus/`](tests/corpus/README.md) is the contract as plain files: valid documents with their expected
-trees (the tagged JSON of [toml-test](https://github.com/toml-lang/toml-test), plus a `decimal` tag) and
-canonical text, and invalid documents with the exact code, line and column they must be refused with. It
-covers every error code, every limit edge, hostile input and every construct. A TypeScript, Java or Rust
+trees (the tagged JSON of [toml-test](https://github.com/toml-lang/toml-test), plus a `decimal` tag), canonical
+text and positions, invalid documents with the exact code, line and column they must be refused with, layered
+documents with their merged tree and the layer of every value, and schema cases with the values and problems they
+read. It covers every error code, every limit edge, hostile input and every construct. A TypeScript, Java or Rust
 implementation of this subset runs the same files to prove it reads and writes exactly what this one does.
 
 ## Use it
@@ -173,17 +267,21 @@ CMake 3.21 or later and a C++20 compiler. With FetchContent:
 include(FetchContent)
 FetchContent_Declare(felitronics_toml
     GIT_REPOSITORY https://github.com/darwinscat/felitronics-toml.git
-    GIT_TAG        v0.1.0
+    GIT_TAG        v0.2.0
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(felitronics_toml)
 
 target_link_libraries(your_app PRIVATE felitronics::toml)
+felitronics_toml_embed(your_app INPUT presets.toml NAMESPACE presets NAME factory)   # optional
 ```
 
 The target adds an include path and `cxx_std_20`, nothing else: no compile options, warnings or definitions
 reach your build, and the tests are not built when the project is not the top level. After
-`cmake --install`, `find_package(felitronics_toml 0.1)` provides the same `felitronics::toml` target. Or copy
-`include/felitronics/toml/Toml.h` into your tree: it has no other files.
+`cmake --install`, `find_package(felitronics_toml 0.2)` provides the same `felitronics::toml` target, the
+`felitronics_toml2cpp` tool and `felitronics_toml_embed()`. The tool runs on the build machine: FetchContent under
+Emscripten builds it for wasm and runs it in node, a package installed from a cross build (Emscripten included) has
+no tool, and any cross build without one names a build-machine copy in `FELITRONICS_TOML2CPP_EXECUTABLE`. Or
+copy `include/felitronics/toml/` into your tree: `Toml.h` alone is the parser and writer.
 
 ## Build and test
 
