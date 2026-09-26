@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Oleh Lafoks and Alisa Lafoks. Part of felitronics-toml, see LICENSE.
 #include <felitronics/toml/Toml.h>
 #include "toml_test.h"
+#include "Fixtures.h"
 
 using namespace felitronics::toml;
 
@@ -82,7 +83,11 @@ int main()
     error ("# é\r\n\t a = \"x\\q\"", Code::InvalidEscape, 2, 10);
     error ("=\n\x80", Code::ExpectedKey, 1, 1);
     error ("a=\"\x80\"\na=1", Code::InvalidUtf8, 1, 4);
-    error ("a=\"é\" x", Code::TrailingCharacters, 1, 8);
+    error ("a=\"é\" x", Code::TrailingCharacters, 1, 7);
+
+    test::group ("columns count code points: every script, a combining mark, a tab, limits crossed by multi-byte text");
+    for (const auto& c : fixtures::codePointColumns()) error (c.text, c.code, c.line, c.column);
+    for (const auto& [name, text] : fixtures::unicodeDocuments()) accepted (text);
 
     test::group ("supported grammar and TOML table ownership");
     for (const char* text : { "", " \t# hi", "\r\n#c\r\na=+0\r\n", "\"\"=true", "123=42", "a=\"\"",

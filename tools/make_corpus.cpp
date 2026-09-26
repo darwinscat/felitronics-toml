@@ -162,7 +162,8 @@ int main (int argc, char** argv)
     invalid ("invalid-escape-after-crlf-and-utf8", "# \xC3\xA9\r\n\t a = \"x\\q\"", Code::InvalidEscape, 2, 10);
     invalid ("syntax-error-before-invalid-utf8", "=\n\x80", Code::ExpectedKey, 1, 1);
     invalid ("invalid-utf8-before-duplicate-key", "a=\"\x80\"\na=1", Code::InvalidUtf8, 1, 4);
-    invalid ("trailing-after-utf8-string", "a=\"\xC3\xA9\" x", Code::TrailingCharacters, 1, 8);
+    invalid ("trailing-after-utf8-string", "a=\"\xC3\xA9\" x", Code::TrailingCharacters, 1, 7);
+    for (const auto& c : fixtures::codePointColumns()) invalid (c.name, c.text, c.code, c.line, c.column);
 
     // --- table ownership ---------------------------------------------------------------------------------------
     invalid ("dotted-table-then-header", "a.b=1\n[a]", Code::RedefinedTable, 2, 2);
@@ -317,6 +318,7 @@ int main (int argc, char** argv)
     valid ("utf8-string-array", "a=[\"\xC3\xA9\",\"\xF0\x9F\x98\x80\"]");
     valid ("empty-tables", "[a]\n[b]\n");
     valid ("utf8-encoding-boundaries", "a=\"\xC2\x80\xDF\xBF\xE0\xA0\x80\xED\x9F\xBF\xEE\x80\x80\xF0\x90\x80\x80\xF4\x8F\xBF\xBF\"");
+    for (const auto& [name, text] : fixtures::unicodeDocuments()) valid (name, text);
     valid ("writer-groups-scalars-tables-arrays", "sub.z = false\nb = 1\na = -0.00\n\"\" = \"\xC3\xA9\\n\\\\\\\"\"\n[[array]]\n");
 
     // --- generated documents: the first 16 of the 512 the property suite generates, then its depth-16 tree ----

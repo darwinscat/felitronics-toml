@@ -1,0 +1,15 @@
+{
+  "ключ": {"type": "string", "value": "значення"},
+  "日本語": {"type": "string", "value": "テキスト"},
+  "العربية": {"type": "string", "value": "نص"},
+  "combining": {"type": "string", "value": "é"},
+  "emoji": [{"type": "string", "value": "😀"}, {"type": "string", "value": "👍🏽"}, {"type": "string", "value": "🇺🇦"}],
+  "таблиця": {
+    "😀": {"type": "bool", "value": "true"}
+  },
+  "Київ": [
+    {
+      "name": {"type": "string", "value": "Київ"}
+    }
+  ]
+}

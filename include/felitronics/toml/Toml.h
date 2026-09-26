@@ -248,7 +248,8 @@ struct Error
 {
     Code code;
     std::uint32_t line;
-    std::uint32_t column;       // one-based UTF-8 BYTE column; EOF is one byte past the last byte
+    std::uint32_t column;       // one-based, in code points (a tab and a 4-byte emoji are one column each);
+                                // EOF is one column past the last character
     bool operator== (const Error&) const = default;
 };
 using ParseResult = std::variant<Table, Error>;
@@ -305,6 +306,19 @@ namespace detail
     if ((n == 2 && scalar < 0x80) || (n == 3 && scalar < 0x800) || (n == 4 && scalar < 0x10000)
         || (scalar >= 0xD800 && scalar <= 0xDFFF) || scalar > 0x10FFFF) return 0;
     return n;
+}
+// The position of byte offset p. Only LF ends a line. A column counts code points: every byte that is not a
+// UTF-8 continuation byte (10xxxxxx) starts one. For valid UTF-8 that is the code point index, and it stays
+// defined for DocumentLimit, whose text is never decoded. Every other error points at the start of a character.
+[[nodiscard]] inline Error errorAt (Code code, std::string_view text, std::size_t p) noexcept
+{
+    std::uint32_t line = 1, column = 1;
+    for (std::size_t i = 0; i < p; ++i)
+    {
+        if (text[i] == '\n') { ++line; column = 1; }
+        else if ((static_cast<unsigned char> (text[i]) & 0xC0u) != 0x80u) ++column;
+    }
+    return { code, line, column };
 }
 inline void appendUtf8 (std::string& s, std::uint32_t u)
 {
@@ -375,16 +389,7 @@ private:
     Code failureCode_ = Code::ExpectedValue;
     bool failed_ = false;
     std::optional<std::pair<Code, std::size_t>> lexical_;
-    [[nodiscard]] Error errorAt (Code code, std::size_t p) const noexcept
-    {
-        std::uint32_t line = 1, column = 1;
-        for (std::size_t i = 0; i < p; ++i)
-        {
-            if (text_[i] == '\n') { ++line; column = 1; }
-            else ++column;
-        }
-        return { code, line, column };
-    }
+    [[nodiscard]] Error errorAt (Code code, std::size_t p) const noexcept { return detail::errorAt (code, text_, p); }
     void scanEncoding()
     {
         if (text_.substr (0, 3) == "\xEF\xBB\xBF") { lexical_ = { Code::Bom, 0 }; return; }
@@ -466,7 +471,15 @@ private:
                     default: fail (Code::InvalidEscape, pos_ - 1); break;
                 }
             }
-            else out += c;
+            else
+            {
+                // A whole UTF-8 sequence at a time, so a limit error points at a character, never inside one.
+                // Every sequence before end_ was validated by scanEncoding; zero cannot happen, and must not loop.
+                const auto n = utf8Width (text_, start);
+                if (n == 0) { fail (Code::InvalidUtf8, start); break; }
+                out.append (text_.substr (start, n));
+                pos_ = start + n;
+            }
             if (out.size() > (key ? kMaxKey : kMaxString)) fail (key ? Code::KeyLimit : Code::StringLimit, start);
         }
         if (! failed_) fail (Code::UnterminatedString, pos_);
@@ -845,9 +858,7 @@ private:
     {
         // Canonical spacing/escapes can grow a compact input. Refuse it here so EVERY successful parse can
         // be written and reparsed under the same 1 MiB limit. This resource check follows syntax validation.
-        std::uint32_t line = 1, column = 1;
-        for (char c : text) { if (c == '\n') { ++line; column = 1; } else ++column; }
-        return Error { Code::CanonicalLimit, line, column };
+        return detail::errorAt (Code::CanonicalLimit, text, text.size());
     }
     return result;
 }

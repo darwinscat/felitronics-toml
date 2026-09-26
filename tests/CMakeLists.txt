@@ -59,7 +59,7 @@ endif()
 # The canonical bytes of the generated corpus, hashed (FNV-1a). Every platform must print this same number:
 # a writer or a decimal conversion that differed anywhere would change it. A deliberate change to the writer
 # or to the generator changes it too, and then this is the line to update.
-set(FELITRONICS_TOML_CORPUS_DIGEST 6415677334463673946)
+set(FELITRONICS_TOML_CORPUS_DIGEST 15720607452201634850)
 set_tests_properties(felitronics_toml_properties_tests PROPERTIES PASS_REGULAR_EXPRESSION
     "canonical corpus FNV-1a: ${FELITRONICS_TOML_CORPUS_DIGEST}\r?\n\r?\n[0-9]+ checks, 0 failures\r?\nALL TESTS PASSED")
 

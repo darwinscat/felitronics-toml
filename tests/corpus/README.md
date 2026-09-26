@@ -23,8 +23,11 @@ invalid/<name>.json            {"code": "<Code>", "line": N, "column": M}, the o
    produces `<name>.canonical.toml` byte for byte when the file exists, and `<name>.toml` itself when it does
    not (the document is already canonical). The canonical text parses to the same tree again.
 3. **Invalid documents.** `parse(<name>.toml)` fails with exactly the code, line and column in `<name>.json`.
-   Codes are the names in `docs/TOML-SUBSET.md`. Lines are 1-based. Columns are 1-based **UTF-8 byte** columns,
-   not characters; end of input is one byte past the last byte. Only the first error is reported.
+   Codes are the names in `docs/TOML-SUBSET.md`. Lines are 1-based, and only LF ends one. Columns are the
+   1-based **code point** index within the line: a Cyrillic letter, a CJK character and a 4-byte emoji are one
+   column each, a tab is one, a combining mark is one of its own. On bytes: every byte that is not a UTF-8
+   continuation byte (`10xxxxxx`) starts a column. End of input is one column past the last character. Only
+   the first error is reported.
 
 ## Tree encoding
 
@@ -57,23 +60,26 @@ mappings. Order is pinned by the canonical text instead. Strings are raw UTF-8 i
 
 | Family | Documents |
 |---|---:|
-| One minimal witness for each of the 30 error codes, and positions counted in UTF-8 bytes | 27 invalid |
+| One minimal witness for each of the 30 error codes | 27 invalid |
 | Table ownership: redefinition, dotted keys against headers, tables against values and arrays of tables | 10 invalid |
 | TOML 1.0 values outside the subset, and malformed numbers, strings and arrays | 33 invalid |
-| Every resource limit, at the limit and at limit + 1 | 10 valid, 11 invalid |
+| Every resource limit, at the limit and at limit + 1, also met and crossed by multi-byte characters | 13 valid, 14 invalid |
 | Hostile input: 1 MiB of `[`, a 100000-part key path, a 100000-item array, an unterminated 900000-byte string | 4 invalid |
 | 13 classes of invalid UTF-8, each in a comment, a key, a string, a header and an array | 65 invalid |
 | 30 forbidden control bytes in a comment, a string and a key; bare CR | 92 invalid |
 | An invalid byte (0x80, then 0x00) inserted at every offset of a document that uses every construct | 110 invalid |
-| Accepted grammar: comments, CRLF, quoted and dotted keys, headers, arrays of tables, edges of every type | 26 valid |
+| Error columns after Cyrillic, CJK, Arabic (right to left), a combining mark, a 4-byte emoji and a tab | 10 invalid |
+| Accepted grammar: comments, CRLF, quoted and dotted keys, headers, arrays of tables, edges of every type, and non-ASCII text in values, quoted keys, headers and comments | 27 valid |
 | Generated: the first 16 of the 512 documents the property suite generates, and its depth-16 tree | 17 valid |
 
-53 valid documents (34 of them with a separate canonical text) and 352 invalid ones, 17.4 MB on disk (0.8 MB
-compressed): a document at the 1 MiB limit is, by nature, a megabyte.
+57 valid documents (38 of them with a separate canonical text) and 365 invalid ones, 17.7 MB on disk (0.8 MB
+compressed): a document at the 1 MiB limit is, by nature, a megabyte. Non-ASCII text is deliberate
+throughout: Latin-1, Greek, Armenian, Cyrillic, CJK, Arabic, combining marks and emoji, in string values,
+quoted keys, table headers and comments.
 
-Python's `tomllib`, an independent TOML 1.0 reader, reads all 53 valid documents and all 34 canonical texts as
-the expected trees (`python3 tools/python-roundtrip.py --corpus tests/corpus`). It also rejects 322 of the 352
-invalid documents. The other 30 are valid TOML 1.0 that this subset refuses on purpose: its resource limits,
+Python's `tomllib`, an independent TOML 1.0 reader, reads all 57 valid documents and all 38 canonical texts as
+the expected trees (`python3 tools/python-roundtrip.py --corpus tests/corpus`). It also rejects 331 of the 365
+invalid documents. The other 34 are valid TOML 1.0 that this subset refuses on purpose: its resource limits,
 literal and multiline strings, inline tables, nested and mixed arrays, hexadecimal, octal and binary integers,
 exponents, underscores, `inf`/`nan`, dates and times, integers beyond int64 and decimals beyond its precision.
 
@@ -91,7 +97,8 @@ build of this repository.
 ## Where the expectations came from
 
 The corpus was seeded by [`tools/make_corpus.cpp`](../../tools/make_corpus.cpp). Every invalid case's code, line
-and column is written in that program by hand (the same values `tests/GrammarTests.cpp` asserts), and it refuses
+and column is written by hand, in that program or in `tests/Fixtures.h` (the same values `tests/GrammarTests.cpp`
+asserts), and it refuses
 to write a case the parser disagrees with. Valid trees and canonical texts are this implementation's output,
 checked independently by `tomllib` as above. From here on the files themselves are the contract: a new case is
 a new pair of files, and changing an existing expectation changes the subset, which belongs in `CHANGELOG.md`.

@@ -17,7 +17,7 @@ int main()
                          "release = 0.050\n");
     if (const Error* e = std::get_if<Error> (&result))
     {
-        // A stable code and a 1-based line:column (UTF-8 bytes). Your UI owns the localized message.
+        // A stable code and a 1-based line:column, the column counted in characters. Your UI owns the message.
         std::printf ("%s at %u:%u\n", codeName (e->code), unsigned (e->line), unsigned (e->column));
         return 1;
     }

@@ -152,11 +152,11 @@ NaN and the writer refuses them. No floating-to-integer cast occurs before range
 
 | Resource | Inclusive limit | Failure |
 |---|---:|---|
-| Input text | 1 MiB (1048576 bytes) | `DocumentLimit` at byte 1048577 |
+| Input text | 1 MiB (1048576 bytes) | `DocumentLimit` at the first byte past the limit |
 | Canonical output | 1 MiB | `CanonicalLimit` at input EOF, after syntax validation |
 | Absolute key path | 16 components, including current-table prefix | `DepthLimit` at the next component |
-| One decoded key | 256 UTF-8 bytes | `KeyLimit` at the byte/escape that exceeds the limit |
-| One decoded string | 65536 UTF-8 bytes | `StringLimit` at the byte/escape that exceeds the limit |
+| One decoded key | 256 UTF-8 bytes | `KeyLimit` at the character or escape that exceeds the limit |
+| One decoded string | 65536 UTF-8 bytes | `StringLimit` at the character or escape that exceeds the limit |
 | One scalar array | 65536 items | `ArrayLimit` at the next item |
 | Total entries | 65536 | `EntryLimit` at the responsible key component |
 
@@ -175,8 +175,17 @@ ensures that every successful `parse` result can be written and parsed again und
 same limits. Whitespace/comment documents and canonical documents succeed at exactly
 1 MiB. Caller-built trees are subject to the same decoded, structural and output limits.
 
-Positions use 1-based lines and **UTF-8 byte columns**, not display columns. CRLF advances
-the line once, at LF. EOF is one byte after the last byte. Only one error is returned.
+Positions use 1-based lines and 1-based columns counted in **code points**: column = the
+1-based code point index within the line, whatever each character's UTF-8 length, and a tab
+counts as one. A combining mark is a column of its own; columns are not grapheme clusters
+and not display width. Stated on bytes, which is how to implement it: every byte that is not
+a UTF-8 continuation byte (`10xxxxxx`) starts a column. For valid UTF-8 that is exactly the
+code point index, and it stays well defined for `DocumentLimit`, whose text is never
+decoded (the byte just past 1 MiB may fall inside a character). Every other error points
+at the start of a character: a key or string limit crossed by a multi-byte character
+points at that character. Only LF ends a line, so CRLF advances the
+line once and its CR is the last column of its line. End of input is one column past the
+last character. Only one error is returned.
 A document-size error precedes parsing. Otherwise the parser stops at the first lexical
 or syntax failure; an invalid encoding/control byte takes precedence at the same position.
 Numeric range/format failures point to the token's start; a tenth decimal fractional
@@ -189,7 +198,7 @@ validation follows a complete successful syntax parse.
 | `DocumentLimit` | Input is larger than 1 MiB |
 | `CanonicalLimit` | Canonical spelling would exceed 1 MiB |
 | `Bom` | Leading UTF-8 BOM |
-| `InvalidUtf8` | Invalid, overlong, truncated, surrogate or out-of-range UTF-8 sequence; points at its first byte |
+| `InvalidUtf8` | Invalid, overlong, truncated, surrogate or out-of-range UTF-8 sequence; points at where it starts |
 | `InvalidControl` | Forbidden raw control byte |
 | `BareCarriageReturn` | CR without LF |
 | `ExpectedKey` | Missing or invalid path component |

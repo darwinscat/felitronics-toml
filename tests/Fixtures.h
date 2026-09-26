@@ -4,6 +4,8 @@
 #include <felitronics/toml/Toml.h>
 #include <bit>
 #include <cstdlib>
+#include <utility>
+#include <vector>
 
 namespace fixtures
 {
@@ -23,9 +25,16 @@ inline std::string decimalInteger (std::uint64_t n)
     do { out.insert (out.begin(), char ('0' + n % 10)); n /= 10; } while (n != 0);
     return out;
 }
+// Cyrillic is spelled with \u escapes in the C++ sources, so a search for Cyrillic prose in them stays meaningful;
+// the corpus files hold it raw. The escapes are UTF-8 in every build: MSVC compiles the tests with /utf-8.
+inline const std::string ukraina = "\u0423\u043A\u0440\u0430\u0457\u043D\u0430";   // "Ukraina": 7 code points, 14 bytes
+inline const std::string klyuch = "\u043A\u043B\u044E\u0447";                       // "klyuch" (key)
+inline const std::string kyiv = "\u041A\u0438\u0457\u0432";                         // "Kyiv"
+
+// Latin-1, Greek, Armenian, Cyrillic, CJK, Arabic (right to left), a combining acute, 4-byte emoji, every control.
 inline std::string specialString (Generator& g)
 {
-    std::string s = "\"\\\b\t\n\f\r é Ελληνικά Հայերեն 日本語 😀 ";
+    std::string s = "\"\\\b\t\n\f\r é Ελληνικά Հայերեն " + ukraina + " 日本語 العربية e\u0301 😀 ";
     for (int c = 0; c < 32; ++c) s += char (c);
     s += char (127);
     for (unsigned i = 0, n = unsigned (g.next() % 64); i < n; ++i) s += char (32 + g.next() % 95);
@@ -57,6 +66,7 @@ inline Table generated (Generator& g, unsigned depth = 0)
     }
     put (t, "", specialString (g));
     put (t, "key\n\"\\é\t", "plain");
+    put (t, klyuch + " 日本語 😀", "a quoted key in three scripts");
     put (t, "minimum", std::numeric_limits<std::int64_t>::min());
     put (t, "maximum", std::numeric_limits<std::int64_t>::max());
     const auto magnitude = std::int64_t (g.next() >> 1);
@@ -77,6 +87,50 @@ inline Table generated (Generator& g, unsigned depth = 0)
     }
     put (t, "decimals", std::move (decimals));
     return t;
+}
+// Error positions after multi-byte characters. A column counts code points, so each of these would read
+// differently in bytes. Every expectation is written by hand.
+struct PositionCase { const char* name; std::string text; Code code; std::uint32_t line, column; };
+inline std::vector<PositionCase> codePointColumns()
+{
+    return {
+        { "column-after-cyrillic-string", "a = \"" + ukraina + "\" x", Code::TrailingCharacters, 1, 15 },
+        { "column-after-cjk-key", "\"日本語\" = 1 x", Code::TrailingCharacters, 1, 11 },
+        { "column-after-emoji", "a = \"😀\\q\"", Code::InvalidEscape, 1, 8 },
+        { "column-after-combining-mark", "a = \"e\u0301\" x", Code::TrailingCharacters, 1, 10 },
+        { "column-after-arabic-key", "\"العربية\" = [1, true]", Code::MixedArray, 1, 17 },
+        { "column-after-cyrillic-comment", "# " + ukraina + " \x80", Code::InvalidUtf8, 1, 11 },
+        { "column-at-end-after-cjk", "a = \"日本", Code::UnterminatedString, 1, 8 },
+        { "column-after-cyrillic-dotted-key", "\"" + klyuch + "\".a = 1\n\"" + klyuch + "\".a.b = 2", Code::TableValueConflict, 2, 8 },
+        { "column-after-cyrillic-header", "[\"" + kyiv + "\".a]\n[\"" + kyiv + "\".a]", Code::RedefinedTable, 2, 9 },
+        { "column-after-tab-and-multibyte", "\ta = \"é\"\tx", Code::TrailingCharacters, 1, 10 },
+        // A limit crossed by a multi-byte character points at that character, not at the byte that crossed it.
+        { "limit-quoted-key-two-byte-character", "\"" + std::string (kMaxKey - 1, 'a') + "é\"=0", Code::KeyLimit, 1, 257 },
+        { "limit-quoted-key-four-byte-character", "\"" + std::string (kMaxKey - 3, 'a') + "😀\"=0", Code::KeyLimit, 1, 255 },
+        { "limit-string-two-byte-character", "a=\"" + std::string (kMaxString - 1, 'x') + "é\"", Code::StringLimit, 1, 65539 } };
+}
+// Accepted documents that use non-ASCII text in every place TOML allows it, and limits met exactly by multi-byte text.
+inline std::vector<std::pair<const char*, std::string>> unicodeDocuments()
+{
+    const std::string znachennya = "\u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F"; // "znachennya" (value)
+    const std::string tablytsya = "\u0442\u0430\u0431\u043B\u0438\u0446\u044F";         // "tablytsya" (table)
+    return {
+        { "unicode-everywhere",
+          "# " + ukraina + ", 日本語, العربية, e\u0301, 😀\n"
+          "\"" + klyuch + "\" = \"" + znachennya + "\"  # " + kyiv + "\n"
+          "\"日本語\" = \"テキスト\"\n"
+          "\"العربية\" = \"نص\"\n"
+          "combining = \"e\u0301\"\n"
+          "emoji = [\"😀\", \"👍🏽\", \"🇺🇦\"]\n"
+          "\n"
+          "[\"" + tablytsya + "\"]\n"
+          "\"😀\" = true\n"
+          "\n"
+          "[[\"" + kyiv + "\"]]\n"
+          "name = \"" + kyiv + "\"\n" },
+        { "limit-quoted-key-two-byte-character", "\"" + std::string (kMaxKey - 2, 'a') + "é\"=0" },
+        { "limit-quoted-key-four-byte-character", "\"" + std::string (kMaxKey - 4, 'a') + "😀\"=0" },
+        { "limit-string-two-byte-character", "a=\"" + std::string (kMaxString - 2, 'x') + "é\"" } };
 }
 // This serializer is test-only and independently spells JSON. Decimal expectations carry exact binary64
 // bits, so Python checks negative zero and rounding as well as TOML type, tree shape and string contents.
