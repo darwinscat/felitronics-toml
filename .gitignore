@@ -1,0 +1,19 @@
+# build trees
+/build/
+/build-*/
+cmake-build-*/
+/out/
+CMakeUserPresets.json
+
+# fuzzing leftovers
+crash-*
+leak-*
+timeout-*
+oom-*
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.user
+__pycache__/
