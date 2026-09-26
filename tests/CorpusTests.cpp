@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <optional>
 #include <string>
 #include <vector>
@@ -150,7 +149,12 @@ private:
                 j.items.push_back (value (depth + 1));
                 if (failed_) return j;
             } while (eat (','));
-            return eat (object ? '}' : ']') ? j : fail();
+            if (! eat (object ? '}' : ']')) return fail();
+            // A repeated member name would let a table with a key missing still match by count.
+            auto names = j.keys;
+            std::sort (names.begin(), names.end());
+            if (std::adjacent_find (names.begin(), names.end()) != names.end()) return fail();
+            return j;
         }
         if (c == '"') { j.kind = Json::Kind::String; j.text = string(); return j; }
         for (const std::string_view word : { "true", "false", "null" })
@@ -161,21 +165,42 @@ private:
                 j.text = std::string (word);
                 return j;
             }
+        // -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?
         const auto start = p_;
+        const auto digits = [&]
+        {
+            const auto first = p_;
+            while (p_ < s_.size() && s_[p_] >= '0' && s_[p_] <= '9') ++p_;
+            return p_ - first;
+        };
         if (p_ < s_.size() && s_[p_] == '-') ++p_;
-        while (p_ < s_.size() && ((s_[p_] >= '0' && s_[p_] <= '9') || s_[p_] == '.' || s_[p_] == 'e' || s_[p_] == 'E' || s_[p_] == '+' || s_[p_] == '-')) ++p_;
-        if (p_ == start) return fail();
+        const bool zero = p_ < s_.size() && s_[p_] == '0';
+        const auto whole = digits();
+        if (whole == 0 || (zero && whole > 1)) return fail();
+        if (p_ < s_.size() && s_[p_] == '.') { ++p_; if (digits() == 0) return fail(); }
+        if (p_ < s_.size() && (s_[p_] == 'e' || s_[p_] == 'E'))
+        {
+            ++p_;
+            if (p_ < s_.size() && (s_[p_] == '+' || s_[p_] == '-')) ++p_;
+            if (digits() == 0) return fail();
+        }
         j.kind = Json::Kind::Number;
         j.text = std::string (s_.substr (start, p_ - start));
         return j;
     }
 };
 
+// The whole file in one read().
 std::optional<std::string> slurp (const fs::path& path)
 {
+    std::error_code ec;
+    const auto size = fs::file_size (path, ec);
     std::ifstream f (path, std::ios::binary);
-    if (! f) return std::nullopt;
-    return std::string (std::istreambuf_iterator<char> (f), std::istreambuf_iterator<char>());
+    if (ec || ! f) return std::nullopt;
+    std::string bytes (static_cast<std::size_t> (size), '\0');
+    f.read (bytes.data(), static_cast<std::streamsize> (bytes.size()));
+    if (static_cast<std::uintmax_t> (f.gcount()) != size) return std::nullopt;
+    return bytes;
 }
 std::optional<Json> readJson (const fs::path& path)
 {
@@ -244,11 +269,12 @@ std::string differs (const Value& v, const Json& j, const std::string& at)
     }
     if (const auto* a = std::get_if<Tables> (&v.data))
     {
+        if (a->empty()) return at + ": an empty array of tables has no TOML spelling; [] is an empty scalar array";
         if (a->size() != j.items.size()) return at + ": expected " + unsignedText (j.items.size()) + " tables";
         for (std::size_t i = 0; i < a->size(); ++i)
         {
             const auto where = at + "[" + unsignedText (i) + "]";
-            if (j.items[i].kind != Json::Kind::Object || isScalar (j.items[i])) return where + ": expected a scalar, not a table";
+            if (j.items[i].kind != Json::Kind::Object || isScalar (j.items[i])) return where + ": the expected JSON is not a table";
             if (auto r = tableDiffers ((*a)[i], j.items[i], where); ! r.empty()) return r;
         }
         return {};
@@ -272,6 +298,7 @@ std::string treeDiffers (const ParseResult& result, const Json& expected)
 {
     if (const auto* e = std::get_if<Error> (&result))
         return std::string ("refused: ") + codeName (e->code) + " at " + unsignedText (e->line) + ":" + unsignedText (e->column);
+    if (expected.kind != Json::Kind::Object || isScalar (expected)) return "the expected root is not a JSON object of keys";
     return tableDiffers (*std::get_if<Table> (&result), expected, "root");
 }
 
@@ -332,7 +359,12 @@ int main (int argc, char** argv)
         const auto* code = expected ? expected->member ("code") : nullptr;
         const auto* line = expected ? expected->member ("line") : nullptr;
         const auto* column = expected ? expected->member ("column") : nullptr;
-        if (! text || ! code || ! line || ! column) { test::ok (false, "invalid/" + name + ": unreadable .toml or .json"); continue; }
+        if (! text || ! code || ! line || ! column || code->kind != Json::Kind::String
+            || line->kind != Json::Kind::Number || column->kind != Json::Kind::Number)
+        {
+            test::ok (false, "invalid/" + name + ": unreadable .toml, or not {\"code\": string, \"line\": number, \"column\": number}");
+            continue;
+        }
         const auto result = parse (*text);
         const auto* e = std::get_if<Error> (&result);
         const auto got = e ? std::string (codeName (e->code)) + " " + unsignedText (e->line) + ":" + unsignedText (e->column) : "accepted";

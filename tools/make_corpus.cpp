@@ -95,6 +95,7 @@ void valid (const std::string& name, std::string_view text)
     save (dir / (name + ".json"), tree (*root, "") + "\n");
     const auto canonical = write (*root);
     if (canonical != text) save (dir / (name + ".canonical.toml"), canonical);
+    else fs::remove (dir / (name + ".canonical.toml")); // a reseed must not leave a stale companion
     ++validCount;
 }
 void invalid (const std::string& name, std::string_view text, Code code, std::uint32_t line, std::uint32_t column)
