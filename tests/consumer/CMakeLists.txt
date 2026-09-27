@@ -10,6 +10,7 @@ project(felitronics_toml_consumer LANGUAGES CXX)
 if(FELITRONICS_TOML_SOURCE)
     add_subdirectory(${FELITRONICS_TOML_SOURCE} felitronics_toml)
 else()
+    # Keep the older request: additive 0.3 releases must still satisfy 0.2 consumers.
     find_package(felitronics_toml 0.2 REQUIRED)
 endif()
 

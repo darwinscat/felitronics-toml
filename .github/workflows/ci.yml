@@ -30,14 +30,15 @@ jobs:
           - { name: ubuntu-clang, os: ubuntu-latest, cxx: clang++ }
           - { name: macos-apple-clang, os: macos-latest }
           - { name: windows-msvc, os: windows-latest }
+          - { name: windows-msvc-debug, os: windows-latest, config: Debug }
     steps:
       - uses: actions/checkout@v7
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cxx && format('-DCMAKE_CXX_COMPILER={0}', matrix.cxx) || '' }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.config || 'Release' }} ${{ matrix.cxx && format('-DCMAKE_CXX_COMPILER={0}', matrix.cxx) || '' }}
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config ${{ matrix.config || 'Release' }} --parallel
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
+        run: ctest --test-dir build -C ${{ matrix.config || 'Release' }} --output-on-failure --no-tests=error --verbose
 
   sanitizers:
     name: ubuntu-clang-asan-ubsan
@@ -56,7 +57,7 @@ jobs:
           # LeakSanitizer exists on Linux only: this is the row where a leak fails the build.
           ASAN_OPTIONS: halt_on_error=1:detect_leaks=1:strict_string_checks=1:detect_stack_use_after_return=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: ctest --test-dir build --output-on-failure --no-tests=error
+        run: ctest --test-dir build --output-on-failure --no-tests=error --verbose
 
   wasm:
     name: wasm (emsdk 6.0.9, node)
@@ -78,7 +79,7 @@ jobs:
         # The Emscripten toolchain sets the crosscompiling emulator, so ctest runs each .js through node.
         run: |
           source "$HOME/emsdk/emsdk_env.sh"
-          ctest --test-dir build --output-on-failure --no-tests=error
+          ctest --test-dir build --output-on-failure --no-tests=error --verbose
 
   tomllib:
     name: tomllib cross-check (Python 3.11)
@@ -92,7 +93,8 @@ jobs:
       - name: Build the property suite
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel --target felitronics_toml_properties_tests
+          cmake --build build --parallel --target felitronics_toml_properties_tests felitronics_toml_storage_tests
+          ctest --test-dir build -R storage --verbose --no-tests=error
       - name: Generated canonical documents, read by tomllib
         run: python tools/python-roundtrip.py build/tests/felitronics_toml_properties_tests
       - name: The conformance corpus, read by tomllib
@@ -110,8 +112,9 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build and install
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFELITRONICS_TOML_BUILD_TESTS=OFF
-          cmake --build build --config Release --parallel
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel --target felitronics_toml2cpp felitronics_toml_storage_tests
+          ctest --test-dir build -C Release -R storage --verbose --no-tests=error
           cmake --install build --config Release --prefix "${{ github.workspace }}/prefix"
       - name: A consumer with find_package and felitronics_toml_embed
         run: |
@@ -133,8 +136,9 @@ jobs:
       - name: Build the fuzz target (clang, ASan + UBSan)
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ \
-                -DFELITRONICS_TOML_FUZZ=ON -DFELITRONICS_TOML_BUILD_TESTS=OFF
-          cmake --build build --target felitronics_toml_fuzz
+                -DFELITRONICS_TOML_FUZZ=ON
+          cmake --build build --target felitronics_toml_fuzz felitronics_toml_storage_tests
+          ctest --test-dir build -R storage --verbose --no-tests=error
       - name: Fuzz
         run: |
           # Seeds: the corpus documents under 4 KiB, prefixed because valid/ and invalid/ share names. With the

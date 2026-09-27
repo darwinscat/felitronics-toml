@@ -560,8 +560,8 @@ The embedding suite embeds every valid document of the corpus and compares each 
 
 ## Verification
 
-Eight ctest suites, the README example and four checks of the tool cover the contract. The
-grammar suite asserts every error code with its exact position, every limit at the limit
+Nine suites, the README example, four checks of the tool and a package-version check cover
+the contract. The grammar suite asserts every error code with its exact position, every limit at the limit
 and one past it, and hostile bytes in every context. The decimal suite checks 90000 seeded
 rationals and every edge against an oracle that uses integer binary long division and
 ties-to-even remainder tests, independent of the production floating-point division. The
@@ -572,8 +572,9 @@ strings) and requires `parse(write(tree)) == tree` and byte-identical rewriting;
 digest of its canonical bytes is pinned in ctest, so every platform is compared against the
 same number. The position suite checks every construct at its exact position and finds each
 position's character in the generated documents without the parser. The overlay and schema
-suites check their rules, and the embedding suite embeds every valid corpus document at
-build time and compares each node with the parse of the same file. The corpus suite runs
+suites check their rules. The storage suite measures cumulative allocation requests against the declared
+bounds, including escaped report paths and platform-specific growth. The embedding suite embeds every
+valid corpus document at build time and compares each node with the parse of the same file. The corpus suite runs
 `tests/corpus/`. The example is built twice, the second time with exceptions and RTTI off.
 
 ```sh
