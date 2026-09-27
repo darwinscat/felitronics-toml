@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.21)
 project(felitronics_toml
-    VERSION 0.2.0
+    VERSION 0.3.0
     DESCRIPTION "A strict, deterministic TOML subset for C++20: parser and canonical writer, header-only"
     HOMEPAGE_URL "https://github.com/darwinscat/felitronics-toml"
     LANGUAGES CXX)
@@ -13,7 +13,7 @@ project(felitronics_toml
 #   include(FetchContent)
 #   FetchContent_Declare(felitronics_toml
 #       GIT_REPOSITORY https://github.com/darwinscat/felitronics-toml.git
-#       GIT_TAG        v0.2.0)
+#       GIT_TAG        v0.3.0)
 #   FetchContent_MakeAvailable(felitronics_toml)
 #   target_link_libraries(app PRIVATE felitronics::toml)
 #   felitronics_toml_embed(app INPUT presets.toml NAMESPACE app NAME presets)   # optional: a document as constexpr data
@@ -71,7 +71,7 @@ if(FELITRONICS_TOML_FUZZ)
 endif()
 
 if(FELITRONICS_TOML_INSTALL)
-    include(CMakePackageConfigHelpers)
+    include(cmake/felitronics_toml_version.cmake)
     install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
     install(TARGETS felitronics_toml EXPORT felitronics_tomlTargets)
     # The tool runs where the build runs, so a cross build (Emscripten, a phone) does not install its own: a consumer
@@ -88,8 +88,7 @@ if(FELITRONICS_TOML_INSTALL)
         "    set_property(GLOBAL PROPERTY FELITRONICS_TOML2CPP_TARGET felitronics::toml2cpp)\n"
         "endif()\n"
         "include(\"\${CMAKE_CURRENT_LIST_DIR}/felitronics_toml_embed.cmake\")\n")
-    write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/felitronics_tomlConfigVersion.cmake
-        COMPATIBILITY SameMinorVersion ARCH_INDEPENDENT)
+    felitronics_toml_package_version(${CMAKE_CURRENT_BINARY_DIR}/felitronics_tomlConfigVersion.cmake ${PROJECT_VERSION})
     install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/felitronics_tomlConfig.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/felitronics_tomlConfigVersion.cmake

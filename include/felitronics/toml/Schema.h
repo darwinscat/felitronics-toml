@@ -77,6 +77,7 @@ struct Storage
     detail::Parser<true> counter (text, 0);
     (void) counter.run();
     auto count = counter.storage;
+    const auto parse = count.parseBytes();
     for (const auto path : description.extraPaths)
     {
         ++count.problems;
@@ -89,7 +90,11 @@ struct Storage
                                                  4 * detail::StorageCount::proxyBytes);
     const auto bytes = detail::storageAdd (detail::storageAdd (count.readValues, count.paths),
                                           detail::storageAdd (slots, readers));
-    return { detail::storageMultiply (2, count.parse), detail::storageMultiply (2, bytes) };
+    // Problem growth, Reader's packed used bits (bounded by one size_t per key), and reserved conversions.
+    auto alignment = detail::StorageCount::vectorAlignment (sizeof (Problem), count.problems);
+    alignment = detail::storageAdd (alignment, detail::StorageCount::vectorAlignment (sizeof (std::size_t), count.problems));
+    alignment = detail::storageAdd (alignment, detail::StorageCount::vectorAlignment (sizeof (std::string), count.values));
+    return { parse, detail::storageMultiply (2, detail::storageAdd (bytes, alignment)) };
 }
 
 // Inclusive bounds; either may be absent: {min, max}, {min}, {std::nullopt, max}. Decimals compare exactly, whatever
@@ -241,9 +246,11 @@ public:
         if (ts == nullptr) { problem (Fault::WrongType, pathOf (key), v->position); return false; }
         for (std::size_t i = 0; i < ts->size(); ++i)
         {
-            std::string element = pathOf (key) + "[";
+            std::string element = pathOf (key);
+            element += '[';
             detail::unsignedText (element, i);
-            Reader row ((*ts)[i], report_, options_, element + "]");
+            element += ']';
+            Reader row ((*ts)[i], report_, options_, std::move (element));
             fn (row);
             row.finish();
         }
@@ -323,9 +330,11 @@ private:
                 typename T::value_type x {};
                 if (const auto fault = detail::convert ((*a)[i], x, range))
                 {
-                    std::string item = pathOf (key) + "[";
+                    std::string item = pathOf (key);
+                    item += '[';
                     detail::unsignedText (item, i);
-                    problem (*fault, item + "]", (*a)[i].position);
+                    item += ']';
+                    problem (*fault, std::move (item), (*a)[i].position);
                     return false;
                 }
                 items.push_back (std::move (x));

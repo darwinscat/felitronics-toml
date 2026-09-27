@@ -394,6 +394,42 @@ template <class String> void appendUtf8 (String& s, std::uint32_t u)
 {
     return b != 0 && a > std::numeric_limits<std::size_t>::max() / b ? std::numeric_limits<std::size_t>::max() : a * b;
 }
+// One byte of a basic string's content, escaped where it must be.
+template <class String> void escaped (String& out, char c)
+{
+    switch (c)
+    {
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\b': out += "\\b"; break;
+        case '\n': out += "\\n"; break;
+        case '\f': out += "\\f"; break;
+        case '\r': out += "\\r"; break;
+        default:
+        {
+            const auto u = static_cast<unsigned char> (c);
+            if ((u < 0x20 && u != '\t') || u == 0x7F)
+            {
+                out += "\\u00";
+                out += "0123456789ABCDEF"[u >> 4]; out += "0123456789ABCDEF"[u & 15u];
+            }
+            else out += c;
+            break;
+        }
+    }
+}
+template <class String> void quoted (String& out, std::string_view s)
+{
+    out += '"';
+    for (const char c : s) escaped (out, c);
+    out += '"';
+}
+template <class String> void keyText (String& out, std::string_view key)
+{
+    if (! key.empty() && std::all_of (key.begin(), key.end(), bare)) out += key;
+    else quoted (out, key);
+}
+
 // Size-only strings let validation and counting use the same parser and writer as materialization.
 struct CountText
 {
@@ -409,18 +445,14 @@ struct CountText
 };
 struct CountString
 {
-    // A nonzero integer overflows within 20 digits. The prefix also preserves the leading-zero check.
-    std::array<char, 32> first {};
-    std::size_t n = 0, escaped = 0;
-    bool isBare = true;
+    // Keys fit in this prefix, so their spelling uses keyText just like the writer and Reader.
+    // Numeric conversion needs at most 20 digits; longer value strings retain only their size.
+    std::array<char, kMaxKey> first {};
+    std::size_t n = 0;
     CountString& operator+= (char c)
     {
         if (n < first.size()) first[n] = c;
         ++n;
-        isBare = isBare && bare (c);
-        const auto u = static_cast<unsigned char> (c);
-        escaped += c == '"' || c == '\\' || c == '\b' || c == '\n' || c == '\f' || c == '\r' ? 2u
-                 : (u < 0x20 && c != '\t') || u == 0x7F ? 6u : 1u;
         return *this;
     }
     void append (std::string_view s) { for (char c : s) *this += c; }
@@ -429,7 +461,13 @@ struct CountString
     char operator[] (std::size_t i) const { return first[i]; }
     const char* begin() const { return first.data(); }
     const char* end() const { return first.data() + std::min (n, first.size()); }
-    std::size_t spelled() const { return isBare && n != 0 ? n : escaped + 2; }
+    // Called only for successfully parsed keys (n <= kMaxKey).
+    std::size_t spelled() const
+    {
+        CountText out;
+        keyText (out, std::string_view (first.data(), n));
+        return out.size();
+    }
 };
 struct CountTable
 {
@@ -463,13 +501,58 @@ struct CountValue
 };
 struct StorageCount
 {
-    std::size_t parse = 0, readValues = 0, problems = 0, paths = 0, rows = 0;
+    std::size_t parse = 0, readValues = 0, problems = 0, paths = 0, rows = 0, values = 0, tables = 0;
     // Two pointers per checked-iterator proxy in the Microsoft standard library, including empty containers.
 #if defined(_MSC_VER) && _ITERATOR_DEBUG_LEVEL != 0
     static constexpr std::size_t proxyBytes = 2 * sizeof (void*);
 #else
     static constexpr std::size_t proxyBytes = 0;
 #endif
+    // MSVC's allocator aligns requests of at least 4096 bytes to 32 bytes and stores the
+    // original pointer (plus a Debug sentinel). These bytes reach operator new too.
+#if defined(_MSC_VER)
+ #if defined(_DEBUG)
+    static constexpr std::size_t alignmentBytes = 31 + 2 * sizeof (void*);
+ #else
+    static constexpr std::size_t alignmentBytes = 31 + sizeof (void*);
+ #endif
+#else
+    static constexpr std::size_t alignmentBytes = 0;
+#endif
+    static std::size_t stringAlignment (std::size_t n)
+    {
+        if constexpr (alignmentBytes == 0) return 0;
+        std::size_t requests = 0;
+        // A large request cannot precede 2048 characters with growth at most twofold.
+        // Subsequent capacities grow by at least floor(1.5 * capacity). Starting below
+        // MSVC's first large capacity also covers rounding, copies and bulk appends.
+        for (std::size_t size = 2048; size <= n;)
+        {
+            ++requests;
+            const auto next = storageAdd (size, size / 2);
+            if (next == size) break;
+            size = next;
+        }
+        return storageMultiply (requests, alignmentBytes);
+    }
+    static std::size_t vectorAlignment (std::size_t element, std::size_t n)
+    {
+        if constexpr (alignmentBytes == 0) return 0;
+        std::size_t capacity = 1;
+        while (storageMultiply (capacity, element) < 4096) capacity *= 2;
+        // Each large doubling request consumes at least capacity/2 new elements.
+        // This bound also holds when n elements are spread over many separate vectors;
+        // reserve-once conversion and Reader bit vectors need no more requests.
+        return storageMultiply (n / std::max (capacity / 2, std::size_t (1)), alignmentBytes);
+    }
+    std::size_t parseBytes() const
+    {
+        auto bytes = storageAdd (parse, vectorAlignment (sizeof (Entry), problems));
+        bytes = storageAdd (bytes, vectorAlignment (sizeof (Table::Node), problems));
+        bytes = storageAdd (bytes, vectorAlignment (sizeof (Value), values));
+        bytes = storageAdd (bytes, vectorAlignment (sizeof (Table), tables));
+        return storageMultiply (2, bytes);
+    }
     // The smallest short-string capacity of the supported standard libraries, for each pointer width.
     static constexpr std::size_t smallString = sizeof (void*) == 4 ? 10 : 15;
     static std::size_t stringBytes (std::size_t n)
@@ -478,7 +561,8 @@ struct StorageCount
         const auto bytes = storageAdd (n, 1);
         // MSVC's 1.5-fold string growth approaches 4.5 requested bytes per character. K = 2
         // times 2.25 character slots covers it, including the terminator and allocation rounding.
-        return storageAdd (storageMultiply (2, bytes), bytes / 4 + (bytes % 4 != 0 ? 1u : 0u));
+        return storageAdd (storageAdd (storageMultiply (2, bytes), bytes / 4 + (bytes % 4 != 0 ? 1u : 0u)),
+                           stringAlignment (n));
     }
     void proxy (std::size_t n) { parse = storageAdd (parse, n * proxyBytes); }
     void string (std::size_t n, bool value)
@@ -770,6 +854,8 @@ private:
             if (peek() != '.') break;
             ++pos_;
         }
+        if constexpr (Counting)
+            storage.parse = storageAdd (storage.parse, StorageCount::vectorAlignment (sizeof (typename Parser<false>::Key), path.size()));
         return path;
     }
     [[nodiscard]] Value scalar()
@@ -867,7 +953,12 @@ private:
                     if (failed_) break;
                     if (! items.empty()) { fail (Code::MixedArray, start); break; }
                     if (! count (start)) break;      // each element counts once, as each [[header]] does
-                    if constexpr (Counting) { storage.parse = storageAdd (storage.parse, 2 * sizeof (toml::Table)); storage.proxy (6); }
+                    if constexpr (Counting)
+                    {
+                        ++storage.tables;
+                        storage.parse = storageAdd (storage.parse, 2 * sizeof (toml::Table));
+                        storage.proxy (6);
+                    }
                     if constexpr (! Counting) grow (tables);
                     tables.push_back (std::move (t));
                 }
@@ -880,6 +971,7 @@ private:
                     { fail (Code::MixedArray, start); break; }
                     if constexpr (Counting)
                     {
+                        ++storage.values;
                         storage.parse = storageAdd (storage.parse, 2 * sizeof (toml::Value));
                         storage.readValues = storageAdd (storage.readValues, sizeof (std::string));
                     }
@@ -1011,6 +1103,7 @@ private:
             if (array)
             {
                 ++storage.rows;
+                ++storage.tables;
                 storage.parse = storageAdd (storage.parse, 2 * sizeof (toml::Table));
                 storage.proxy (10);
             }
@@ -1087,36 +1180,6 @@ template <class String> void unsignedText (String& out, std::uint64_t n)
     }
     return true;
 }
-// One byte of a basic string's content, escaped where it must be.
-template <class String> void escaped (String& out, char c)
-{
-    switch (c)
-    {
-        case '"': out += "\\\""; break;
-        case '\\': out += "\\\\"; break;
-        case '\b': out += "\\b"; break;
-        case '\n': out += "\\n"; break;
-        case '\f': out += "\\f"; break;
-        case '\r': out += "\\r"; break;
-        default:
-        {
-            const auto u = static_cast<unsigned char> (c);
-            if ((u < 0x20 && u != '\t') || u == 0x7F)
-            {
-                out += "\\u00";
-                out += "0123456789ABCDEF"[u >> 4]; out += "0123456789ABCDEF"[u & 15u];
-            }
-            else out += c;
-            break;
-        }
-    }
-}
-template <class String> void quoted (String& out, std::string_view s)
-{
-    out += '"';
-    for (const char c : s) escaped (out, c);
-    out += '"';
-}
 // The multi-line spelling: the opening quotes on the key's line, the text from the next line on, a raw LF for
 // each line feed. A quote stays raw unless another quote or the closing delimiter follows it, so no run of
 // quotes can close the string early. Everything else is escaped as in a one-line string.
@@ -1129,11 +1192,6 @@ template <class String> void multilineQuoted (String& out, std::string_view s)
         else escaped (out, s[i]);
     }
     out += "\"\"\"";
-}
-template <class String> void keyText (String& out, std::string_view key)
-{
-    if (! key.empty() && std::all_of (key.begin(), key.end(), bare)) out += key;
-    else quoted (out, key);
 }
 
 template <class String = std::string> class Writer
@@ -1360,7 +1418,7 @@ struct Layers
 {
     detail::Parser<true> counter (text, 0);
     (void) counter.run();
-    return detail::storageMultiply (2, counter.storage.parse);
+    return counter.storage.parseBytes();
 }
 // source is copied into every Position of the tree, so values from different documents stay apart after overlay().
 [[nodiscard]] inline ParseResult parse (std::string_view text, std::uint32_t source = 0) noexcept

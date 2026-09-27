@@ -168,8 +168,9 @@ reads the result into structs; CI builds it from the installed package and from 
 `storageFor(text, ReadStorage{})` in `Schema.h` returns `Storage { parse, read }` for the parse and
 one schema traversal. Both overloads are allocation-free, deterministic and `noexcept`, including for
 malformed input. The bytes are **cumulative allocation requests**, including temporary buffers and
-vector growth, rather than peak live memory or allocator bookkeeping. The input text is already owned
-by the caller. Add the two fields when reserving for both operations.
+vector growth and standard-library alignment bytes passed to `operator new`. Heap bookkeeping outside
+those requests and peak live memory are separate. The input text is already owned by the caller.
+Add the two fields when reserving for both operations.
 
 ```cpp
 #include <felitronics/toml/Schema.h>
@@ -196,15 +197,32 @@ The canonical-size check also uses the writer's existing path with a size-only o
 No separate lexer or heap-backed scratch tree is involved; scratch space is bounded by the depth limit.
 
 Counts use this build's `sizeof(Entry)`, `Value`, `Table`, parser key, index node and `Problem`, character
-storage (2¼ slots per character beyond short-string storage), and two slots per growing vector element. These vectors grow by doubling. The final multiplier
-is **K = 2**. MSVC checked iterators additionally budget the two-pointer container proxy (including short strings and empty table-array readers) when
-`_ITERATOR_DEBUG_LEVEL != 0`; this keeps the same multiplier in Debug. Arithmetic saturates at
+storage (2¼ slots per character beyond short-string storage), and two slots per growing vector element.
+These vectors grow by doubling. The final multiplier
+is **K = 2**. MSVC requests of at least 4096 bytes explicitly budget another `31 + sizeof(void*)` bytes
+per potential allocation, or `31 + 2*sizeof(void*)` in Debug, for alignment and stored pointers.
+This covers string growth, expanded report paths, and every allocating vector; canonical-size validation allocates nothing.
+MSVC checked iterators also budget the two-pointer container proxy (including short strings and empty table-array readers)
+when `_ITERATOR_DEBUG_LEVEL != 0`. Arithmetic saturates at
 `SIZE_MAX`, which signals an unrepresentable allowance; also check for overflow when adding the two fields.
 The storage suite measures every allocation request
-on libc++, libstdc++, MSVC Release/Debug and wasm32 libc++, including native string growth boundaries.
+on libc++, libstdc++, MSVC Release/Debug and wasm32 libc++, including repeated strings at native growth
+boundaries and report paths containing every escape kind.
 It checks the complete conformance corpus, generated documents and adversarial cases. On realistic
 (non-limit, valid) cases, both parse and worst measured schema-read allowances must also stay within
 **K_tight = 8** of actual requests; zero-allocation cases are checked for coverage only.
+
+Measured maxima below are **actual / count**, parse/read; the declaration is `2 * count`.
+The last column is **declared / actual** on realistic inputs. Every bound and tightness check passed.
+
+| Platform | Realistic P/R | Adversarial P/R | Invalid/truncated P/R | Realistic tightness P/R |
+|---|---:|---:|---:|---:|
+| Local arm64, Apple clang 21, libc++ | 1.2789 / 1.6154 | 1.9998 / 1.8847 | 1.3322 / 0.7200 | 4.6190 / 6.0000 |
+| Debian x64, GCC 14.2, libstdc++ | 1.2910 / 1.6296 | 1.9998 / 1.9000 | 1.6648 / 0.7591 | 4.5467 / 5.7358 |
+| Debian wasm32, emsdk 6.0.9, libc++ | 1.2876 / 1.6491 | 1.9998 / 1.9214 | 1.3327 / 0.6346 | 4.8093 / 6.7761 |
+| Windows x64, MSVC 19.44 Release | 1.2914 / 1.6185 | 1.9955 / 1.8718 | 1.7340 / 0.7372 | 4.5467 / 5.9608 |
+| Windows x64, MSVC 19.44 Debug, iterator level 2 | 1.5000 / 1.2500 | 1.9943 / 1.7674 | 1.6399 / 1.2500 | 4.3043 / 4.7937 |
+| macOS x64, Apple clang 14.0.3, libc++ | 1.2789 / 1.6154 | 1.9998 / 1.8847 | 1.3322 / 0.7200 | 4.6190 / 6.0000 |
 
 ## Why it exists
 
@@ -256,7 +274,9 @@ limit and error code, and exactly where each error points.
 
 ## How it is tested
 
-Eight suites, **118,196 checks** on every platform:
+Nine suites, **141,815–142,017 checks** in the builds below. Totals depend on the standard library's string
+growth boundaries and checked iterators. The eight fixed suites contribute 118,196 checks; storage adds
+23,619 on native libc++, 23,643 on GCC and wasm32, 23,811 on MSVC Release, and 23,821 on MSVC Debug.
 
 | Suite | Checks | What |
 |---|---:|---|
@@ -268,16 +288,19 @@ Eight suites, **118,196 checks** on every platform:
 | schema | 53 | whole documents into structs, every fault at its position, ranges across scales, integers as decimals |
 | corpus | 745 | the [conformance corpus](tests/corpus/README.md): 72 valid documents, 427 invalid ones, 9 overlays, 9 schema cases |
 | embedding | 293 | every valid corpus document embedded at build time, node for node against its parse, some with `static_assert` |
+| storage | 23,619–23,821 | cumulative allocation bounds, allocation-free counting, escaped paths, growth boundaries, and realistic-input tightness |
 
 The property suite hashes the canonical bytes of everything it writes, and ctest requires the same hash,
-`15547082836514840367`, on every platform. Before this release all the suites passed, with that hash, on:
+`15547082836514840367`, on every platform. Release verification used these builds; the older macOS host
+ran the storage suite:
 
 | Platform | Compiler | Builds |
 |---|---|---|
 | macOS 26.5, arm64 | Apple clang 21.0.0 | Release; Debug with ASan + UBSan |
-| Debian 13, x86-64 | GCC 14.2.0 | Release; Debug with ASan + UBSan + LeakSanitizer |
-| Windows 11, x64 | MSVC 19.44, `/W4 /WX /permissive-` | Release; Debug with `/fsanitize=address` |
+| Debian 13, x86-64 | GCC 14.2.0 | Release |
+| Windows 11, x64 | MSVC 19.44, `/W4 /WX /permissive-` | Release; Debug with checked iterators |
 | WebAssembly, node 24.19 | Emscripten 6.0.9 | Release, exceptions and RTTI off; the embedding tool runs in node at build time |
+| macOS 13, x86-64 | Apple clang 14.0.3 | Optimized storage suite, strict warnings |
 
 All test code, and the headers the embedding tool generates, build with warnings as errors (`-Wall -Wextra
 -Wpedantic -Wconversion -Wsign-conversion -Wshadow` and more on gcc and clang, `/W4 /WX` on MSVC).
@@ -311,7 +334,7 @@ CMake 3.21 or later and a C++20 compiler. With FetchContent:
 include(FetchContent)
 FetchContent_Declare(felitronics_toml
     GIT_REPOSITORY https://github.com/darwinscat/felitronics-toml.git
-    GIT_TAG        v0.2.0
+    GIT_TAG        v0.3.0
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(felitronics_toml)
 
@@ -321,8 +344,11 @@ felitronics_toml_embed(your_app INPUT presets.toml NAMESPACE presets NAME factor
 
 The target adds an include path and `cxx_std_20`, nothing else: no compile options, warnings or definitions
 reach your build, and the tests are not built when the project is not the top level. After
-`cmake --install`, `find_package(felitronics_toml 0.2)` provides the same `felitronics::toml` target, the
-`felitronics_toml2cpp` tool and `felitronics_toml_embed()`. The tool runs on the build machine: FetchContent under
+`cmake --install`, `find_package(felitronics_toml 0.3)` provides the same `felitronics::toml` target, the
+`felitronics_toml2cpp` tool and `felitronics_toml_embed()`. Package compatibility accepts a version at least
+as new as the requested version, with the same major: this additive 0.3.0 release still satisfies
+`find_package(felitronics_toml 0.2)`, while a future 1.x package cannot satisfy a 0.x request.
+The tool runs on the build machine: FetchContent under
 Emscripten builds it for wasm and runs it in node, a package installed from a cross build (Emscripten included) has
 no tool, and any cross build without one names a build-machine copy in `FELITRONICS_TOML2CPP_EXECUTABLE`. Or
 copy `include/felitronics/toml/` into your tree: `Toml.h` alone is the parser and writer.

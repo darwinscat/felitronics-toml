@@ -128,7 +128,7 @@ void fields (Reader& in, int mode)
             in.refuse (e.key);
     }
 }
-void check (const std::string& text, const std::string& name, Ratios& group, bool tight = false)
+void check (const std::string& text, const std::string& name, Ratios& group, bool tight = false, bool evidence = false)
 {
     allocation::start();
     const auto declared = storageFor (text, ReadStorage{});
@@ -140,6 +140,7 @@ void check (const std::string& text, const std::string& name, Ratios& group, boo
     allocation::start();
     auto parsed = parse (text);
     const auto parseBytes = allocation::stop();
+    if (evidence) std::printf ("REGRESSION %s: parse declared %zu requested %zu\n", name.c_str(), declared.parse, parseBytes);
     if (declared.parse < parseBytes)
         std::printf ("UNDER parse %s: %zu < %zu\n", name.c_str(), declared.parse, parseBytes);
     test::ok (declared.parse >= parseBytes, name + ": parse bound");
@@ -164,6 +165,8 @@ void check (const std::string& text, const std::string& name, Ratios& group, boo
         allocation::start();
         const auto report = read (root, [mode] (Reader& in) { fields (in, mode); });
         const auto readBytes = allocation::stop();
+        if (evidence && mode == 3)
+            std::printf ("REGRESSION %s: range read declared %zu requested %zu\n", name.c_str(), declared.read, readBytes);
         worstRead = std::max (worstRead, readBytes);
         if (declared.read < readBytes)
             std::printf ("UNDER read %s mode %d: %zu < %zu\n", name.c_str(), mode, declared.read, readBytes);
@@ -177,18 +180,72 @@ void check (const std::string& text, const std::string& name, Ratios& group, boo
         test::ok (double (declared.read) <= 8 * double (worstRead), name + ": read tightness <= 8");
     }
 }
+
+void regressions()
+{
+    std::string strings = "a=[";
+    for (int i = 0; i < 17; ++i)
+    {
+        if (i != 0) strings += ',';
+        strings += '"'; strings += std::string (45658, 'x'); strings += '"';
+    }
+    strings += ']';
+    check (strings, "17 large strings", adversarial, false, true);
+
+    // Every basic-string escape, both Unicode escape widths, UTF-8 widths and every writer control spelling.
+    for (const std::string_view escape : { "\\b", "\\t", "\\n", "\\f", "\\r", "\\\"", "\\\\",
+                                          "\\u0000", "\\u001F", "\\u007F", "\\u0123", "\\u1234", "\\U0001F408" })
+        for (const std::size_t n : { 1u, 15u, 16u, 22u, 23u, 31u, 32u, 63u, 64u, 127u, 128u, 255u, 256u })
+        {
+            const std::size_t width = escape == "\\u0123" ? 2u : escape == "\\u1234" ? 3u : escape == "\\U0001F408" ? 4u : 1u;
+            if (n * width > kMaxKey) continue;
+            std::string key = "\"";
+            for (std::size_t i = 0; i < n; ++i) key += escape;
+            key += '"';
+            const auto name = std::string (escape) + " path x" + fixtures::decimalInteger (n);
+            check (key + "=[1]", name, adversarial, false, escape == "\\u0000" && n == 128);
+            check (key + "." + key + "=[1]", "nested " + name, adversarial);
+            check ("[[" + key + "]]\n" + key + "=[1]", "table array " + name, adversarial);
+            const auto parsed = parse (key + "=[1]");
+            test::ok (std::holds_alternative<Table> (parsed), name + ": escaped key is valid");
+            if (const auto* root = std::get_if<Table> (&parsed))
+            {
+                const auto& decoded = root->entries().front().key;
+                std::string expected;
+                detail::keyText (expected, decoded);
+                expected += "[0]";
+                const auto report = read (*root, [&] (Reader& in)
+                { std::vector<std::int64_t> values; (void) in.required (decoded, values, { 0, 0 }); });
+                test::ok (report.problems.size() == 1 && report.problems.front().path == expected,
+                          name + ": indexed problem preserves the escaped path");
+            }
+        }
+    // Expanded report paths exceed MSVC's large-allocation threshold despite short decoded keys.
+    std::string key = "\"", path;
+    for (std::size_t i = 0; i < kMaxKey; ++i) key += "\\u0000";
+    key += '"';
+    for (std::size_t depth = 0; depth < kMaxDepth; ++depth)
+    {
+        if (! path.empty()) path += '.';
+        path += key;
+        check (path + "=[1]", "deep escaped range path", adversarial);
+        if (depth + 1 < kMaxDepth) check ("[[" + path + "]]\na=[1]", "deep escaped table-array path", adversarial);
+    }
+}
 }
 
 int main (int argc, char** argv)
 {
     using namespace felitronics::toml;
     static_assert (noexcept (storageFor (std::string_view{})) && noexcept (storageFor (std::string_view{}, ReadStorage{})));
-    if (argc != 2) return 2;
+    if (argc != 2 && argc != 3) return 2;
 #if defined(_MSC_VER) && defined(_DEBUG)
     static_assert (_ITERATOR_DEBUG_LEVEL == 2);
 #endif
     std::printf ("pointer=%zu Entry=%zu Value=%zu Table=%zu Problem=%zu proxy=%zu\n",
                  sizeof (void*), sizeof (Entry), sizeof (Value), sizeof (Table), sizeof (Problem), detail::StorageCount::proxyBytes);
+    regressions();
+    if (argc == 3 && std::string_view (argv[2]) == "--regressions") return test::report();
     for (const auto& f : std::filesystem::recursive_directory_iterator (argv[1]))
     {
         if (f.path().extension() != ".toml") continue;
@@ -201,7 +258,9 @@ int main (int argc, char** argv)
     }
     fixtures::Generator g { 0x74736f72 };
     for (int i = 0; i < 64; ++i) check (write (fixtures::generated (g)), "generated", realistic, true);
-    for (std::size_t n : { 0u, 1u, 15u, 16u, 22u, 23u, 31u, 32u, 63u, 64u, 127u, 128u, 1024u, 4097u, 32769u, 65536u })
+    for (std::size_t n : { 0u, 1u, 15u, 16u, 17u, 22u, 23u, 31u, 32u, 33u, 63u, 64u, 65u, 127u, 128u, 129u,
+                           255u, 256u, 257u, 511u, 512u, 513u, 1023u, 1024u, 1025u, 2047u, 2048u, 2049u,
+                           4095u, 4096u, 4097u, 32769u, 65536u })
     {
         std::string keys, headers, tables, array = "a=[", inlines = "a=[", strings = "a=[";
         for (std::size_t i = 0; i < n; ++i)
@@ -230,6 +289,15 @@ int main (int argc, char** argv)
         if (n > kMaxString) break;
         capacityProbe.resize (n, 'x');
         check ("a=\"" + capacityProbe + "\"", "native string growth boundary", adversarial);
+        std::string repeated = "a=[";
+        const auto copies = std::min (std::size_t (17), (kMaxDocument - 4) / (n + 3));
+        for (std::size_t i = 0; i < copies; ++i)
+        {
+            if (i != 0) repeated += ',';
+            repeated += '"'; repeated += capacityProbe; repeated += '"';
+        }
+        repeated += ']';
+        check (repeated, "repeated native string growth boundary", adversarial);
     }
     std::string path;
     for (std::size_t depth = 0; depth <= kMaxDepth; ++depth)

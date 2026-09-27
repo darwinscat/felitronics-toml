@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Changelog
 
-## v0.3.0 — Unreleased
+## v0.3.0 — 2026-09-28
 
 - **`storageFor(text)`**, and **`storageFor(text, ReadStorage)`** in `Schema.h`, declare cumulative
   allocation bytes before parsing and typed reading. Allocation-free counting shares the parser's syntax
@@ -10,8 +10,11 @@
 - The canonical-size validation shares the writer with a size-only output and no longer allocates a
   serialized document. Parser and report vectors grow by doubling. Parsing, errors and read results are unchanged.
 - Allocation-counting tests cover the conformance corpus, generated and adversarial documents on every
-  CI row, including MSVC Debug with checked iterators and wasm32. K = 2, with an MSVC iterator-proxy term;
-  realistic cases also enforce an 8-fold tightness ceiling.
+  CI row, including MSVC Debug with checked iterators and wasm32. K = 2, with explicit MSVC iterator-proxy
+  and large-request alignment terms; realistic cases also enforce an 8-fold tightness ceiling. Escaped report paths append indices in place,
+  and key spelling sizes use the same writer helpers as serialization.
+- **Package compatibility.** This additive release accepts requests for older versions within the same
+  major version, including `find_package(felitronics_toml 0.2)`. A future 1.x package cannot satisfy a 0.x request.
 
 ## v0.2.0 — 2026-09-26
 
