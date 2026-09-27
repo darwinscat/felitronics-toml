@@ -53,6 +53,10 @@ felitronics_toml_test(felitronics_toml_properties_tests PropertiesTests.cpp)
 felitronics_toml_test(felitronics_toml_position_tests PositionTests.cpp)
 felitronics_toml_test(felitronics_toml_overlay_tests OverlayTests.cpp)
 felitronics_toml_test(felitronics_toml_schema_tests SchemaTests.cpp)
+felitronics_toml_test(felitronics_toml_storage_tests StorageTests.cpp ARGS ${CMAKE_CURRENT_SOURCE_DIR}/corpus)
+if(EMSCRIPTEN)
+    target_link_options(felitronics_toml_storage_tests PRIVATE -sNODERAWFS=1)
+endif()
 
 # The language-neutral conformance corpus (tests/corpus/README.md): the same files any other implementation
 # of this subset can run to prove it matches, byte for byte and error position for error position.

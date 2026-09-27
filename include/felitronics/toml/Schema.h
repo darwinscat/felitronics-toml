@@ -10,6 +10,7 @@
 #include <felitronics/toml/Toml.h>
 
 #include <concepts>
+#include <span>
 #include <type_traits>
 
 namespace felitronics::toml
@@ -58,6 +59,38 @@ struct ReadOptions
 {
     Severity unknownKeys = Severity::Error;   // Warning: report keys the schema did not read, and still read the rest
 };
+
+// One read() with a fresh report, visiting each present key/table once, plus these possible
+// missing required fields or additional custom refusals.
+// Each extra path is its complete TOML spelling, including table-array indices; duplicates count separately.
+struct ReadStorage
+{
+    std::span<const std::string_view> extraPaths {};
+};
+struct Storage
+{
+    std::size_t parse = 0;
+    std::size_t read = 0;
+};
+[[nodiscard]] inline Storage storageFor (std::string_view text, ReadStorage description) noexcept
+{
+    detail::Parser<true> counter (text, 0);
+    (void) counter.run();
+    auto count = counter.storage;
+    for (const auto path : description.extraPaths)
+    {
+        ++count.problems;
+        count.paths = detail::storageAdd (count.paths, detail::storageMultiply (3, detail::StorageCount::stringBytes (path.size())));
+    }
+    const auto slots = detail::storageMultiply (count.problems, 2 * sizeof (Problem) + sizeof (std::size_t)
+                     + 8 * detail::StorageCount::proxyBytes);
+    // Empty rows still construct Reader, its checked bit vector, and several checked path strings.
+    const auto readers = detail::storageMultiply (detail::storageAdd (count.rows, 1),
+                                                 4 * detail::StorageCount::proxyBytes);
+    const auto bytes = detail::storageAdd (detail::storageAdd (count.readValues, count.paths),
+                                          detail::storageAdd (slots, readers));
+    return { detail::storageMultiply (2, count.parse), detail::storageMultiply (2, bytes) };
+}
 
 // Inclusive bounds; either may be absent: {min, max}, {min}, {std::nullopt, max}. Decimals compare exactly, whatever
 // their scales. A constructor, not an aggregate, so {min} alone raises no missing-initializer warning.
@@ -246,6 +279,7 @@ public:
             if (! used_[i])
             {
                 const auto& e = table_.entries()[i];
+                detail::grow (report_.problems);
                 report_.problems.push_back ({ Fault::UnknownKey, options_.unknownKeys, pathOf (e.key), e.keyPosition, 0 });
             }
     }
@@ -271,6 +305,7 @@ private:
     }
     void problem (Fault fault, std::string path, Position position, std::uint32_t detail = 0)
     {
+        detail::grow (report_.problems);
         report_.problems.push_back ({ fault, Severity::Error, std::move (path), position, detail });
     }
     template <class T> bool get (std::string_view key, T& out, const typename detail::Bounds<T>::type& range, Need need)

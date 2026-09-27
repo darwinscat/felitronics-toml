@@ -162,6 +162,50 @@ A document the parser refuses fails the build with `factory.toml:12:5: error: Du
 [`tests/consumer/`](tests/consumer) is a complete project that embeds a preset, lays a user's file over it and
 reads the result into structs; CI builds it from the installed package and from the source tree.
 
+## Declaring storage before a parse or schema read
+
+`storageFor(text)` in `Toml.h` returns an upper bound in bytes for one `parse(text)`.
+`storageFor(text, ReadStorage{})` in `Schema.h` returns `Storage { parse, read }` for the parse and
+one schema traversal. Both overloads are allocation-free, deterministic and `noexcept`, including for
+malformed input. The bytes are **cumulative allocation requests**, including temporary buffers and
+vector growth, rather than peak live memory or allocator bookkeeping. The input text is already owned
+by the caller. Add the two fields when reserving for both operations.
+
+```cpp
+#include <felitronics/toml/Schema.h>
+
+using namespace felitronics::toml;
+const std::string_view extraPaths[] = { "name", "limiter.release" };
+const Storage bytes = storageFor(text, ReadStorage { extraPaths });
+// Publish a checked sum of bytes.parse and bytes.read before calling parse() and read().
+```
+
+The schema allowance covers one `read()` with a fresh report, visiting each present table once and converting each present field once,
+with at most one problem per present key, including unknown keys and custom refusals. It includes
+`Reader` bookkeeping, paths, the `Report`, and library conversion buffers for strings and scalar vectors.
+List the **complete TOML-spelled paths** of possible missing required keys and additional custom refusals
+in `ReadStorage::extraPaths`. Include each occurrence, including its array index for table arrays;
+overestimating the list is safe. An optional absent field needs no entry. A failed typed conversion and
+a subsequent refusal at the same key need one additional entry. Caller callback allocations, assembling
+application objects, copying reports or trees, repeated reads, overlays and serialization are separate.
+
+The counter instantiates the parser with fixed-size counting values: encoding checks, string escapes,
+numbers, keys, arrays and inline tables follow the same code. It budgets every syntactic key as a possible
+insertion and can continue past duplicate keys or conflicting headers, so failed parses remain covered.
+The canonical-size check also uses the writer's existing path with a size-only output string.
+No separate lexer or heap-backed scratch tree is involved; scratch space is bounded by the depth limit.
+
+Counts use this build's `sizeof(Entry)`, `Value`, `Table`, parser key, index node and `Problem`, character
+storage (2¼ slots per character beyond short-string storage), and two slots per growing vector element. These vectors grow by doubling. The final multiplier
+is **K = 2**. MSVC checked iterators additionally budget the two-pointer container proxy (including short strings and empty table-array readers) when
+`_ITERATOR_DEBUG_LEVEL != 0`; this keeps the same multiplier in Debug. Arithmetic saturates at
+`SIZE_MAX`, which signals an unrepresentable allowance; also check for overflow when adding the two fields.
+The storage suite measures every allocation request
+on libc++, libstdc++, MSVC Release/Debug and wasm32 libc++, including native string growth boundaries.
+It checks the complete conformance corpus, generated documents and adversarial cases. On realistic
+(non-limit, valid) cases, both parse and worst measured schema-read allowances must also stay within
+**K_tight = 8** of actual requests; zero-allocation cases are checked for coverage only.
+
 ## Why it exists
 
 Reading `gain = -1.25` looks trivial until the same file has to produce the same number everywhere. `strtod`

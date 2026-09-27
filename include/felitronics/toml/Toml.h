@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cfloat>      // FLT_EVAL_METHOD
 #include <cmath>       // signbit preserves negative zero without assuming byte order
 #include <cstddef>
@@ -15,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -34,6 +36,11 @@ inline constexpr std::size_t kMaxEntries = 65536;
 
 namespace detail
 {
+template <class T> void grow (std::vector<T>& v)
+{
+    // A shared growth rule makes cumulative requests less than four slots per appended element.
+    if (v.size() == v.capacity()) v.reserve (v.empty() ? 1 : v.size() * 2);
+}
 [[nodiscard]] inline std::uint64_t power10 (std::uint8_t scale) noexcept
 {
     std::uint64_t n = 1;
@@ -105,7 +112,7 @@ struct Position
 
 struct Value;
 struct Entry;
-namespace detail { class Parser; struct Layers; }
+namespace detail { template <bool> class Parser; struct Layers; struct StorageCount; }
 
 // Keys cannot be changed in place: that keeps the lookup index consistent with insertion order.
 // The sorted AVL index stores vector offsets, so lookup and insertion take O(log n) comparisons even for
@@ -149,7 +156,8 @@ private:
     [[nodiscard]] std::size_t rotate (std::size_t n, bool left) noexcept;
     [[nodiscard]] std::size_t link (std::size_t n, std::size_t added) noexcept;
     [[nodiscard]] std::size_t locate (std::string_view key) const noexcept;
-    friend class detail::Parser;
+    template <bool> friend class detail::Parser;
+    friend struct detail::StorageCount;
     friend struct detail::Layers;
 };
 
@@ -263,6 +271,8 @@ inline const Entry* Table::entry (std::string_view key) const noexcept
 inline bool Table::insert (std::string key, Value value, Position keyPosition)
 {
     if (locate (key) != 0) return false;
+    detail::grow (entries_);
+    detail::grow (index_);
     entries_.push_back ({ std::move (key), std::move (value), keyPosition });
     index_.push_back ({});
     root_ = link (root_, entries_.size());
@@ -365,7 +375,7 @@ namespace detail
     }
     return { code, line, column };
 }
-inline void appendUtf8 (std::string& s, std::uint32_t u)
+template <class String> void appendUtf8 (String& s, std::uint32_t u)
 {
     if (u < 0x80) s += char (u);
     else if (u < 0x800) { s += char (0xC0u | (u >> 6)); s += char (0x80u | (u & 63u)); }
@@ -376,16 +386,135 @@ inline void appendUtf8 (std::string& s, std::uint32_t u)
       s += char (0x80u | ((u >> 6) & 63u)); s += char (0x80u | (u & 63u)); }
 }
 
-class Parser
+[[nodiscard]] constexpr std::size_t storageAdd (std::size_t a, std::size_t b) noexcept
 {
+    return b > std::numeric_limits<std::size_t>::max() - a ? std::numeric_limits<std::size_t>::max() : a + b;
+}
+[[nodiscard]] constexpr std::size_t storageMultiply (std::size_t a, std::size_t b) noexcept
+{
+    return b != 0 && a > std::numeric_limits<std::size_t>::max() / b ? std::numeric_limits<std::size_t>::max() : a * b;
+}
+// Size-only strings let validation and counting use the same parser and writer as materialization.
+struct CountText
+{
+    std::size_t n = 0;
+    CountText() = default;
+    CountText (const char* s) : n (std::char_traits<char>::length (s)) {}
+    CountText& operator+= (const char* s) { n += std::char_traits<char>::length (s); return *this; }
+    CountText& operator+= (char) { ++n; return *this; }
+    CountText& operator+= (std::string_view s) { n += s.size(); return *this; }
+    CountText& operator+= (const CountText& s) { n += s.n; return *this; }
+    std::size_t size() const { return n; }
+    bool empty() const { return n == 0; }
+};
+struct CountString
+{
+    // A nonzero integer overflows within 20 digits. The prefix also preserves the leading-zero check.
+    std::array<char, 32> first {};
+    std::size_t n = 0, escaped = 0;
+    bool isBare = true;
+    CountString& operator+= (char c)
+    {
+        if (n < first.size()) first[n] = c;
+        ++n;
+        isBare = isBare && bare (c);
+        const auto u = static_cast<unsigned char> (c);
+        escaped += c == '"' || c == '\\' || c == '\b' || c == '\n' || c == '\f' || c == '\r' ? 2u
+                 : (u < 0x20 && c != '\t') || u == 0x7F ? 6u : 1u;
+        return *this;
+    }
+    void append (std::string_view s) { for (char c : s) *this += c; }
+    std::size_t size() const { return n; }
+    bool empty() const { return n == 0; }
+    char operator[] (std::size_t i) const { return first[i]; }
+    const char* begin() const { return first.data(); }
+    const char* end() const { return first.data() + std::min (n, first.size()); }
+    std::size_t spelled() const { return isBare && n != 0 ? n : escaped + 2; }
+};
+struct CountTable
+{
+    enum class Origin { Inline };
+    using Style = toml::Table::Style;
+    Origin origin_ = Origin::Inline;
+    Style style = Style::Inline;
+    Position position {};
+};
+template <class T> struct CountVector
+{
+    T first {};
+    std::size_t n = 0;
+    void push_back (T v) { if (n++ == 0) first = std::move (v); }
+    std::size_t size() const { return n; }
+    bool empty() const { return n == 0; }
+    const T& front() const { return first; }
+};
+struct CountValue
+{
+    struct Data { std::size_t type = 0; std::size_t index() const { return type; } } data;
+    Position position {};
+    CountValue() = default;
+    CountValue (CountString) {}
+    CountValue (std::int64_t) : data { 1 } {}
+    CountValue (Decimal) : data { 2 } {}
+    CountValue (bool) : data { 3 } {}
+    CountValue (CountVector<CountValue>) : data { 4 } {}
+    CountValue (CountTable) : data { 5 } {}
+    CountValue (CountVector<CountTable>) : data { 6 } {}
+};
+struct StorageCount
+{
+    std::size_t parse = 0, readValues = 0, problems = 0, paths = 0, rows = 0;
+    // Two pointers per checked-iterator proxy in the Microsoft standard library, including empty containers.
+#if defined(_MSC_VER) && _ITERATOR_DEBUG_LEVEL != 0
+    static constexpr std::size_t proxyBytes = 2 * sizeof (void*);
+#else
+    static constexpr std::size_t proxyBytes = 0;
+#endif
+    // The smallest short-string capacity of the supported standard libraries, for each pointer width.
+    static constexpr std::size_t smallString = sizeof (void*) == 4 ? 10 : 15;
+    static std::size_t stringBytes (std::size_t n)
+    {
+        if (n <= smallString) return 0;
+        const auto bytes = storageAdd (n, 1);
+        // MSVC's 1.5-fold string growth approaches 4.5 requested bytes per character. K = 2
+        // times 2.25 character slots covers it, including the terminator and allocation rounding.
+        return storageAdd (storageMultiply (2, bytes), bytes / 4 + (bytes % 4 != 0 ? 1u : 0u));
+    }
+    void proxy (std::size_t n) { parse = storageAdd (parse, n * proxyBytes); }
+    void string (std::size_t n, bool value)
+    {
+        parse = storageAdd (parse, stringBytes (n));
+        if (value) readValues = storageAdd (readValues, stringBytes (n));
+    }
+    void entry (const CountString& key, std::size_t prefix)
+    {
+        parse = storageAdd (parse, 2 * (sizeof (Entry) + sizeof (Table::Node)) + stringBytes (key.size()));
+        proxy (12);
+        ++problems;
+        paths = storageAdd (paths, stringBytes (prefix + key.spelled()));
+    }
+};
+
+template <bool Counting = false> class Parser
+{
+    template <bool> friend class Parser;
+    using String = std::conditional_t<Counting, CountString, std::string>;
+    using Value = std::conditional_t<Counting, CountValue, toml::Value>;
+    using Table = std::conditional_t<Counting, CountTable, toml::Table>;
+    using Array = std::conditional_t<Counting, CountVector<Value>, toml::Array>;
+    using Tables = std::conditional_t<Counting, CountVector<Table>, toml::Tables>;
+    struct Key { String name; std::size_t pos; Position position; };
+    using Keys = std::conditional_t<Counting, CountVector<Key>, std::vector<Key>>;
 public:
+    StorageCount storage {};
     Parser (std::string_view s, std::uint32_t source) : text_ (s), source_ (source) {}
-    [[nodiscard]] ParseResult run()
+    [[nodiscard]] std::variant<Table, Error> run()
     {
         if (text_.size() > kMaxDocument) return errorAt (Code::DocumentLimit, kMaxDocument);
         scanEncoding();
         end_ = lexical_ ? lexical_->second : text_.size();
         Table root;
+        if constexpr (Counting) storage.proxy (4);
         root.position = position (0);
         Table* current = &root;
         std::size_t currentDepth = 0;
@@ -398,8 +527,9 @@ public:
                 const auto where = position (pos_);
                 ++pos_;
                 const bool array = peek() == '[';
-                if (array) ++pos_;
-                auto path = keys (0);
+                if (array) { ++pos_; arrayPaths_ = true; }
+                pathBytes_ = 0;
+                auto path = keys (0, false, true);
                 if (failed_) break;
                 if (peek() != ']') { fail (Code::ExpectedHeaderEnd, pos_); break; }
                 ++pos_;
@@ -414,6 +544,7 @@ public:
             }
             else
             {
+                const auto prefix = pathBytes_;
                 auto path = keys (currentDepth);
                 if (failed_) break;
                 if (peek() != '=') { fail (Code::ExpectedEquals, pos_); break; }
@@ -421,6 +552,7 @@ public:
                 Value value = readValue (currentDepth + path.size());
                 if (failed_ || ! lineEnd()) break;
                 assign (*current, path, std::move (value));
+                pathBytes_ = prefix;
             }
         }
         if (lexical_ && (! failed_ || lexical_->second <= failurePos_))
@@ -430,7 +562,15 @@ public:
     }
 
 private:
-    struct Key { std::string name; std::size_t pos; Position position; };
+    struct StringCharge
+    {
+        Parser& parser;
+        const String& string;
+        bool enabled = true, value = false;
+        ~StringCharge() { if constexpr (Counting) if (enabled) parser.storage.string (string.size(), value); }
+    };
+    std::size_t pathBytes_ = 0;
+    bool arrayPaths_ = false;
     std::string_view text_;
     std::uint32_t source_ = 0;
     std::size_t pos_ = 0, end_ = 0, entries_ = 0, failurePos_ = 0;
@@ -498,9 +638,10 @@ private:
     // A basic string, or with three quotes a multi-line basic string (never a key): a line ending right after the
     // opening quotes is dropped, CRLF inside reads as LF, a backslash that ends a line drops every space, tab and
     // line ending after it, and one or two quotes may stand right before the closing three.
-    [[nodiscard]] std::string string (bool key)
+    [[nodiscard]] String string (bool key)
     {
-        std::string out;
+        String out;
+        StringCharge charge { *this, out, ! key, ! key };
         const std::size_t limit = key ? kMaxKey : kMaxString;
         const bool multiline = ! key && text_.substr (pos_, 3) == "\"\"\"" && pos_ + 3 <= end_;
         pos_ += multiline ? 3 : 1;
@@ -590,16 +731,18 @@ private:
     }
     // Inside an inline table (braced), EOF, a line ending or a comment where a key belongs is UnterminatedInlineTable.
     [[nodiscard]] bool lineEnds() const noexcept { return atEnd() || peek() == '\n' || peek() == '\r' || peek() == '#'; }
-    [[nodiscard]] std::vector<Key> keys (std::size_t base, bool braced = false)
+    [[nodiscard]] Keys keys (std::size_t base, bool braced = false, bool heading = false)
     {
-        std::vector<Key> path;
+        Keys path;
+        if constexpr (Counting) storage.proxy (1);
         for (;;)
         {
             spaces();
             if (braced && lineEnds()) { fail (Code::UnterminatedInlineTable, pos_); break; }
             if (base + path.size() == kMaxDepth) { fail (Code::DepthLimit, pos_); break; }
             const auto start = pos_;
-            std::string name;
+            String name;
+            StringCharge charge { *this, name };
             if (peek() == '"') name = string (true);
             else
             {
@@ -611,8 +754,19 @@ private:
                 if (name.empty()) fail (Code::ExpectedKey, pos_);
             }
             if (failed_) break;
+            if constexpr (Counting)
+            {
+                storage.entry (name, pathBytes_ + (arrayPaths_ ? 7 * (base + path.size() + 1) : 0));
+                pathBytes_ += name.spelled() + 1;
+                storage.parse = storageAdd (storage.parse, sizeof (typename Parser<false>::Key) * (path.size() == 0 ? 1 : 2));
+            }
+            if constexpr (! Counting) grow (path);
             path.push_back ({ std::move (name), start, position (start) });
             spaces();
+            if constexpr (Counting)
+                if (heading || peek() == '.')
+                    storage.paths = storageAdd (storage.paths,
+                        2 * StorageCount::stringBytes (pathBytes_ + (arrayPaths_ ? 7 * (base + path.size()) : 0)));
             if (peek() != '.') break;
             ++pos_;
         }
@@ -620,6 +774,9 @@ private:
     }
     [[nodiscard]] Value scalar()
     {
+        // Checked strings allocate a proxy even for short numeric tokens; string values also move
+        // through Value and array growth. Three counted proxies cover six such requests after K.
+        if constexpr (Counting) storage.proxy (3);
         const auto start = pos_;
         if (peek() == '"') return string (false);
         if (atEnd() || peek() == '#' || peek() == '\n' || peek() == '\r' || peek() == ',' || peek() == ']' || peek() == '}')
@@ -637,7 +794,8 @@ private:
         const bool negative = token[p] == '-';
         if (token[p] == '-' || token[p] == '+') ++p;
         // Digits, each underscore between two of them (TOML's rule). The digits are collected without them.
-        std::string digits;
+        String digits;
+        StringCharge charge { *this, digits };
         const auto run = [&] (bool fraction, std::uint8_t& scale)
         {
             for (const auto first = p; p < token.size() && (digit (token[p]) || token[p] == '_'); ++p)
@@ -694,6 +852,7 @@ private:
         // One type per array: every item the same scalar alternative, or every item an inline table.
         Array items;
         Tables tables;
+        if constexpr (Counting) storage.proxy (8);
         if (peek() != ']')
             for (;;)
             {
@@ -703,10 +862,13 @@ private:
                 const auto itemWhere = position (start);
                 if (peek() == '{')
                 {
+                    arrayPaths_ = true;
                     Table t = inlineTable (depth, itemWhere);
                     if (failed_) break;
                     if (! items.empty()) { fail (Code::MixedArray, start); break; }
                     if (! count (start)) break;      // each element counts once, as each [[header]] does
+                    if constexpr (Counting) { storage.parse = storageAdd (storage.parse, 2 * sizeof (toml::Table)); storage.proxy (6); }
+                    if constexpr (! Counting) grow (tables);
                     tables.push_back (std::move (t));
                 }
                 else
@@ -716,6 +878,12 @@ private:
                     v.position = itemWhere;
                     if (! tables.empty() || (! items.empty() && v.data.index() != items.front().data.index()))
                     { fail (Code::MixedArray, start); break; }
+                    if constexpr (Counting)
+                    {
+                        storage.parse = storageAdd (storage.parse, 2 * sizeof (toml::Value));
+                        storage.readValues = storageAdd (storage.readValues, sizeof (std::string));
+                    }
+                    if constexpr (! Counting) grow (items);
                     items.push_back (std::move (v));
                 }
                 spaceLines();
@@ -735,6 +903,12 @@ private:
     [[nodiscard]] Table inlineTable (std::size_t depth, Position where)
     {
         Table t;
+        if constexpr (Counting)
+        {
+            ++storage.rows;
+            storage.proxy (12);
+            storage.paths = storageAdd (storage.paths, 2 * StorageCount::stringBytes (pathBytes_ + (arrayPaths_ ? 7 * depth : 0)));
+        }
         t.origin_ = Table::Origin::Inline;
         t.style = Table::Style::Inline;
         t.position = where;
@@ -744,6 +918,7 @@ private:
         // comma or the closing brace belongs) is UnterminatedInlineTable.
         for (;;)
         {
+            const auto prefix = pathBytes_;
             auto path = keys (depth, true);
             if (failed_) break;
             if (lineEnds()) { fail (Code::UnterminatedInlineTable, pos_); break; }
@@ -753,6 +928,7 @@ private:
             Value value = readValue (depth + path.size());
             if (failed_) break;
             assign (t, path, std::move (value));
+            pathBytes_ = prefix;
             if (failed_) break;
             spaces();
             if (peek() == '}') { ++pos_; break; }
@@ -801,78 +977,99 @@ private:
                 return &a->back();
         fail (Code::TableValueConflict, k.pos); return nullptr;
     }
-    void assign (Table& t, const std::vector<Key>& path, Value v)
+    void assign (Table& t, const Keys& path, Value v)
     {
-        Table* parent = &t;
-        for (std::size_t i = 0; i + 1 < path.size(); ++i)
+        if constexpr (Counting) { (void) t; (void) path; (void) v; }
+        else
         {
-            parent = descend (*parent, path[i], true);
-            if (parent == nullptr) return;
+            Table* parent = &t;
+            for (std::size_t i = 0; i + 1 < path.size(); ++i)
+            {
+                parent = descend (*parent, path[i], true);
+                if (parent == nullptr) return;
+            }
+            const auto& key = path.back();
+            if (const auto* old = parent->find (key.name))
+            {
+                // A key assigned before is a duplicate, inline tables included. A table that headers or dotted keys
+                // built cannot become a value: that is a conflict of roles.
+                const auto* table = std::get_if<Table> (&old->data);
+                const auto* tables = std::get_if<Tables> (&old->data);
+                const bool built = (table != nullptr && table->origin_ != Table::Origin::Inline)
+                                || (tables != nullptr && ! tables->empty() && tables->back().origin_ != Table::Origin::Inline);
+                fail (built ? Code::TableValueConflict : Code::DuplicateKey, key.pos); return;
+            }
+            (void) add (*parent, key, std::move (v));
         }
-        const auto& key = path.back();
-        if (const auto* old = parent->find (key.name))
-        {
-            // A key assigned before is a duplicate, inline tables included. A table that headers or dotted keys
-            // built cannot become a value: that is a conflict of roles.
-            const auto* table = std::get_if<Table> (&old->data);
-            const auto* tables = std::get_if<Tables> (&old->data);
-            const bool built = (table != nullptr && table->origin_ != Table::Origin::Inline)
-                            || (tables != nullptr && ! tables->empty() && tables->back().origin_ != Table::Origin::Inline);
-            fail (built ? Code::TableValueConflict : Code::DuplicateKey, key.pos); return;
-        }
-        (void) add (*parent, key, std::move (v));
     }
-    [[nodiscard]] Table* header (Table& root, const std::vector<Key>& path, bool array, Position where)
+
+    [[nodiscard]] Table* header (Table& root, const Keys& path, bool array, Position where)
     {
-        Table* parent = &root;
-        for (std::size_t i = 0; i + 1 < path.size(); ++i)
+        if constexpr (Counting)
         {
-            parent = descend (*parent, path[i], false);
-            if (parent == nullptr) return nullptr;
-        }
-        const auto& key = path.back();
-        auto* v = parent->find (key.name);
-        if (array)
-        {
-            if (v == nullptr)
+            (void) path; (void) where;
+            if (array)
             {
-                Value container { Tables{} };
-                container.position = where;     // the array of tables is where its first [[header]] is
-                v = add (*parent, key, std::move (container));
+                ++storage.rows;
+                storage.parse = storageAdd (storage.parse, 2 * sizeof (toml::Table));
+                storage.proxy (10);
             }
-            if (v == nullptr) return nullptr;
-            if (auto* a = std::get_if<Tables> (&v->data); a != nullptr && (a->empty() || a->back().origin_ != Table::Origin::Inline))
-            {
-                if (a->size() == kMaxArray) { fail (Code::ArrayLimit, key.pos); return nullptr; }
-                if (! count (key.pos)) return nullptr;
-                a->emplace_back();
-                a->back().origin_ = Table::Origin::Header;
-                a->back().position = where;
-                return &a->back();
-            }
+            return &root;
         }
         else
         {
-            if (v == nullptr) v = add (*parent, key, Table{});
-            if (v == nullptr) return nullptr;
-            if (auto* child = std::get_if<Table> (&v->data))
+            Table* parent = &root;
+            for (std::size_t i = 0; i + 1 < path.size(); ++i)
             {
-                if (child->origin_ == Table::Origin::Inline) { fail (Code::TableValueConflict, key.pos); return nullptr; }
-                if (child->origin_ != Table::Origin::Implicit) { fail (Code::RedefinedTable, key.pos); return nullptr; }
-                child->origin_ = Table::Origin::Header;
-                child->position = v->position = where;
-                return child;
+                parent = descend (*parent, path[i], false);
+                if (parent == nullptr) return nullptr;
             }
+            const auto& key = path.back();
+            auto* v = parent->find (key.name);
+            if (array)
+            {
+                if (v == nullptr)
+                {
+                    Value container { Tables{} };
+                    container.position = where;     // the array of tables is where its first [[header]] is
+                    v = add (*parent, key, std::move (container));
+                }
+                if (v == nullptr) return nullptr;
+                if (auto* a = std::get_if<Tables> (&v->data); a != nullptr && (a->empty() || a->back().origin_ != Table::Origin::Inline))
+                {
+                    if (a->size() == kMaxArray) { fail (Code::ArrayLimit, key.pos); return nullptr; }
+                    if (! count (key.pos)) return nullptr;
+                    grow (*a);
+                    a->emplace_back();
+                    a->back().origin_ = Table::Origin::Header;
+                    a->back().position = where;
+                    return &a->back();
+                }
+            }
+            else
+            {
+                if (v == nullptr) v = add (*parent, key, Table{});
+                if (v == nullptr) return nullptr;
+                if (auto* child = std::get_if<Table> (&v->data))
+                {
+                    if (child->origin_ == Table::Origin::Inline) { fail (Code::TableValueConflict, key.pos); return nullptr; }
+                    if (child->origin_ != Table::Origin::Implicit) { fail (Code::RedefinedTable, key.pos); return nullptr; }
+                    child->origin_ = Table::Origin::Header;
+                    child->position = v->position = where;
+                    return child;
+                }
+            }
+            fail (Code::TableValueConflict, key.pos); return nullptr;
         }
-        fail (Code::TableValueConflict, key.pos); return nullptr;
     }
+
 };
 } // namespace detail
 
 
 namespace detail
 {
-inline void unsignedText (std::string& out, std::uint64_t n)
+template <class String> void unsignedText (String& out, std::uint64_t n)
 {
     char digits[20];
     std::size_t size = 0;
@@ -891,7 +1088,7 @@ inline void unsignedText (std::string& out, std::uint64_t n)
     return true;
 }
 // One byte of a basic string's content, escaped where it must be.
-inline void escaped (std::string& out, char c)
+template <class String> void escaped (String& out, char c)
 {
     switch (c)
     {
@@ -914,7 +1111,7 @@ inline void escaped (std::string& out, char c)
         }
     }
 }
-inline void quoted (std::string& out, std::string_view s)
+template <class String> void quoted (String& out, std::string_view s)
 {
     out += '"';
     for (const char c : s) escaped (out, c);
@@ -923,7 +1120,7 @@ inline void quoted (std::string& out, std::string_view s)
 // The multi-line spelling: the opening quotes on the key's line, the text from the next line on, a raw LF for
 // each line feed. A quote stays raw unless another quote or the closing delimiter follows it, so no run of
 // quotes can close the string early. Everything else is escaped as in a one-line string.
-inline void multilineQuoted (std::string& out, std::string_view s)
+template <class String> void multilineQuoted (String& out, std::string_view s)
 {
     out += "\"\"\"\n";
     for (std::size_t i = 0; i < s.size(); ++i)
@@ -933,23 +1130,23 @@ inline void multilineQuoted (std::string& out, std::string_view s)
     }
     out += "\"\"\"";
 }
-inline void keyText (std::string& out, std::string_view key)
+template <class String> void keyText (String& out, std::string_view key)
 {
     if (! key.empty() && std::all_of (key.begin(), key.end(), bare)) out += key;
     else quoted (out, key);
 }
 
-class Writer
+template <class String = std::string> class Writer
 {
 public:
-    [[nodiscard]] std::optional<std::string> run (const Table& root)
+    [[nodiscard]] std::optional<String> run (const Table& root)
     {
         table (root, "", 0);
         if (failed_) return std::nullopt;
         return std::move (out_);
     }
 private:
-    std::string out_;
+    String out_;
     std::size_t entries_ = 0;
     bool failed_ = false;
     void bound() { if (out_.size() > kMaxDocument) failed_ = true; }
@@ -1049,7 +1246,7 @@ private:
         }
         out_ += " }";
     }
-    void heading (const std::string& path, bool array)
+    void heading (const String& path, bool array)
     {
         if (! out_.empty()) out_ += '\n';
         out_ += array ? "[[" : "[";
@@ -1057,7 +1254,7 @@ private:
         out_ += array ? "]]\n" : "]\n";
         bound();
     }
-    void table (const Table& t, const std::string& path, std::size_t depth)
+    void table (const Table& t, const String& path, std::size_t depth)
     {
         // Checking before descent caps call-stack depth even for an invalid caller-built tree.
         if (depth > kMaxDepth) { failed_ = true; return; }
@@ -1081,7 +1278,7 @@ private:
                 const auto* child = std::get_if<Table> (&e.value.data);
                 const auto* array = std::get_if<Tables> (&e.value.data);
                 if ((group == 0 && child == nullptr) || (group == 1 && array == nullptr)) continue;
-                std::string next = path;
+                String next = path;
                 if (depth != 0) next += '.';
                 keyText (next, e.key);
                 if (group == 0) { heading (next, false); table (*child, next, depth + 1); }
@@ -1157,11 +1354,19 @@ struct Layers
     auto out = writeChecked (root);
     return out ? std::move (*out) : std::string{};
 }
+// Cumulative bytes requested through operator new by one parse, including temporary storage.
+// Allocation-free; semantic conflicts may be counted through the remaining syntactically valid input.
+[[nodiscard]] inline std::size_t storageFor (std::string_view text) noexcept
+{
+    detail::Parser<true> counter (text, 0);
+    (void) counter.run();
+    return detail::storageMultiply (2, counter.storage.parse);
+}
 // source is copied into every Position of the tree, so values from different documents stay apart after overlay().
 [[nodiscard]] inline ParseResult parse (std::string_view text, std::uint32_t source = 0) noexcept
 {
-    auto result = detail::Parser (text, source).run();
-    if (const auto* root = std::get_if<Table> (&result); root != nullptr && ! writeChecked (*root))
+    auto result = detail::Parser<> (text, source).run();
+    if (const auto* root = std::get_if<Table> (&result); root != nullptr && ! detail::Writer<detail::CountText>{}.run (*root))
     {
         // Canonical spacing/escapes can grow a compact input. Refuse it here so EVERY successful parse can
         // be written and reparsed under the same 1 MiB limit. This resource check follows syntax validation.

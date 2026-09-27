@@ -1,6 +1,18 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Changelog
 
+## v0.3.0 — Unreleased
+
+- **`storageFor(text)`**, and **`storageFor(text, ReadStorage)`** in `Schema.h`, declare cumulative
+  allocation bytes before parsing and typed reading. Allocation-free counting shares the parser's syntax
+  path, uses the library's element sizes, and covers refused documents. Schema descriptions name possible
+  missing required paths and additional refusals.
+- The canonical-size validation shares the writer with a size-only output and no longer allocates a
+  serialized document. Parser and report vectors grow by doubling. Parsing, errors and read results are unchanged.
+- Allocation-counting tests cover the conformance corpus, generated and adversarial documents on every
+  CI row, including MSVC Debug with checked iterators and wasm32. K = 2, with an MSVC iterator-proxy term;
+  realistic cases also enforce an 8-fold tightness ceiling.
+
 ## v0.2.0 — 2026-09-26
 
 The subset grows by four TOML 1.0 constructs, every value knows where it was written, and three optional layers
